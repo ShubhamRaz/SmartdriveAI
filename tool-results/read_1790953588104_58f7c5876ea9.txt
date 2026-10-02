@@ -1,0 +1,2002 @@
+     1→# MASTER PROMPT — BUILD COMPLETE SMARTDRIVE AI PROJECT
+     2→
+     3→You are an expert full-stack engineer, AI/computer-vision engineer, UI/UX designer, and simulation-system architect.
+     4→
+     5→Build a complete, polished, production-quality **web-based simulation project** called:
+     6→
+     7→# SMARTDRIVE AI
+     8→
+     9→### Multi-Vehicle Intelligent Driver Monitoring, Risk Detection & Autonomous Safety Intervention Simulator
+    10→
+    11→Tagline:
+    12→
+    13→**Detect Risk. Take Control. Prevent the Crash.**
+    14→
+    15→The goal is to create a **fully simulated technology-fest prototype**. Do NOT require physical Arduino/ESP32 hardware for the core application. Everything must work on a normal laptop using the browser, webcam, keyboard/mouse controls, and software-based vehicle simulation.
+    16→
+    17→The final result must look like a serious AI automotive safety research prototype, not a basic student dashboard.
+    18→
+    19→---
+    20→
+    21→# 1. CORE CONCEPT
+    22→
+    23→The application simulates three vehicle types:
+    24→
+    25→1. 🏍️ Bike
+    26→2. 🚗 Car
+    27→3. 🚛 Truck
+    28→
+    29→The user selects a vehicle from the website.
+    30→
+    31→The selected vehicle determines which safety rules and intervention logic are enabled.
+    32→
+    33→The laptop webcam is activated for driver monitoring.
+    34→
+    35→The system analyzes:
+    36→
+    37→* Driver presence
+    38→* Face presence
+    39→* Eye closure / drowsiness
+    40→* Driver attention
+    41→* Helmet state for bike
+    42→* Alcohol state
+    43→* Accident/impact simulation
+    44→* Vehicle state
+    45→* Safety state
+    46→
+    47→The system must then make decisions and control the simulated vehicle.
+    48→
+    49→The most advanced demonstration must be:
+    50→
+    51→### Truck:
+    52→
+    53→If the truck is moving and the driver becomes drowsy or alcohol is detected:
+    54→
+    55→1. Detect unsafe condition
+    56→2. Issue warning
+    57→3. Escalate warning if condition persists
+    58→4. Disable normal/manual vehicle control
+    59→5. Activate autonomous safety mode
+    60→6. Reduce vehicle speed
+    61→7. Move the truck toward the roadside
+    62→8. Turn on hazard indicators
+    63→9. Stop the truck in a designated safe stopping zone
+    64→10. Display why the autonomous intervention happened
+    65→
+    66→This should be visually obvious to a judge.
+    67→
+    68→---
+    69→
+    70→# 2. IMPORTANT IMPLEMENTATION PRINCIPLE
+    71→
+    72→The project is a **simulation**, not a real autonomous-driving system.
+    73→
+    74→Do not claim that the system can safely control a real vehicle.
+    75→
+    76→Use software simulation for vehicle movement and intervention.
+    77→
+    78→Clearly display:
+    79→
+    80→**SIMULATION MODE — NOT FOR REAL VEHICLE CONTROL**
+    81→
+    82→The UI should distinguish between:
+    83→
+    84→* AI DETECTION
+    85→* SIMULATED SENSOR INPUT
+    86→* SAFETY DECISION
+    87→* SIMULATED VEHICLE CONTROL
+    88→
+    89→---
+    90→
+    91→# 3. PREFERRED TECHNOLOGY STACK
+    92→
+    93→Use:
+    94→
+    95→### Frontend
+    96→
+    97→* React
+    98→* TypeScript
+    99→* Vite
+   100→* Tailwind CSS
+   101→* Framer Motion
+   102→* Lucide React icons
+   103→* Recharts where useful
+   104→
+   105→### Computer Vision
+   106→
+   107→Prefer browser-based processing so that the application works locally without requiring a cloud AI API.
+   108→
+   109→Use appropriate browser-compatible computer-vision libraries such as:
+   110→
+   111→* MediaPipe Tasks Vision
+   112→* MediaPipe Face Landmarker
+   113→* MediaPipe Face Detector
+   114→* TensorFlow.js if needed
+   115→
+   116→For drowsiness detection, implement eye/face landmark based logic.
+   117→
+   118→For helmet detection, create a pluggable detection architecture.
+   119→
+   120→If a reliable browser helmet model is unavailable, implement a clearly labeled **helmet simulation/detection fallback** so the demo always works. Do not leave the feature as an unimplemented placeholder.
+   121→
+   122→### Storage
+   123→
+   124→Use localStorage or IndexedDB for:
+   125→
+   126→* simulation settings
+   127→* detection thresholds
+   128→* event history
+   129→* selected vehicle
+   130→* session statistics
+   131→
+   132→No external database is required.
+   133→
+   134→### Communication
+   135→
+   136→The entire project should work without external services.
+   137→
+   138→---
+   139→
+   140→# 4. PROJECT MUST RUN LOCALLY
+   141→
+   142→Generate the complete project with:
+   143→
+   144→* package.json
+   145→* all source files
+   146→* components
+   147→* hooks
+   148→* utilities
+   149→* simulation engine
+   150→* AI detection engine
+   151→* styles
+   152→* assets/placeholders where required
+   153→* README
+   154→* setup instructions
+   155→
+   156→Commands must be:
+   157→
+   158→```bash
+   159→npm install
+   160→npm run dev
+   161→```
+   162→
+   163→The application must run successfully.
+   164→
+   165→Do not give pseudo-code.
+   166→
+   167→Do not leave TODO comments for major functionality.
+   168→
+   169→Do not write "implement later".
+   170→
+   171→Build the actual working implementation.
+   172→
+   173→---
+   174→
+   175→# 5. APPLICATION STRUCTURE
+   176→
+   177→Create these major areas:
+   178→
+   179→## A. Landing / Home Dashboard
+   180→
+   181→Display:
+   182→
+   183→SMARTDRIVE AI
+   184→
+   185→Subtitle:
+   186→
+   187→Multi-Vehicle Intelligent Driver Safety Simulator
+   188→
+   189→Three large vehicle cards:
+   190→
+   191→```text
+   192→🏍️ BIKE
+   193→Helmet + Alcohol + Driver Monitoring
+   194→```
+   195→
+   196→```text
+   197→🚗 CAR
+   198→Driver Monitoring + Alcohol + Safety Intervention
+   199→```
+   200→
+   201→```text
+   202→🚛 TRUCK
+   203→Driver Monitoring + Alcohol + Autonomous Safety Stop
+   204→```
+   205→
+   206→Add:
+   207→
+   208→**START SIMULATION**
+   209→
+   210→Also display a small system overview:
+   211→
+   212→```text
+   213→CAMERA
+   214→AI VISION
+   215→SAFETY ENGINE
+   216→VEHICLE SIMULATION
+   217→```
+   218→
+   219→---
+   220→
+   221→# 6. MAIN SIMULATION SCREEN
+   222→
+   223→After selecting a vehicle, open a full simulation dashboard.
+   224→
+   225→Layout should contain:
+   226→
+   227→### Left side
+   228→
+   229→Live camera panel
+   230→
+   231→### Center
+   232→
+   233→Large vehicle simulation area
+   234→
+   235→### Right side
+   236→
+   237→AI safety telemetry
+   238→
+   239→### Bottom
+   240→
+   241→Controls and event timeline
+   242→
+   243→Example:
+   244→
+   245→```text
+   246→┌───────────────────────────────────────────────────────────────┐
+   247→│ SMARTDRIVE AI                                    SIMULATION   │
+   248→├───────────────┬───────────────────────────────┬───────────────┤
+   249→│ DRIVER CAMERA │      VEHICLE SIMULATION       │ AI STATUS     │
+   250→│               │                               │               │
+   251→│   WEBCAM      │          🚛                  │ Driver        │
+   252→│               │       ROAD                  │ Helmet        │
+   253→│               │                               │ Alcohol       │
+   254→│               │                               │ Drowsiness    │
+   255→├───────────────┴───────────────────────────────┴───────────────┤
+   256→│ SIMULATION CONTROLS                                           │
+   257→│ Start | Stop | Alcohol | Drowsiness | Accident | Reset        │
+   258→├────────────────────────────────────────────────────────────────┤
+   259→│ EVENT TIMELINE                                                 │
+   260→└────────────────────────────────────────────────────────────────┘
+   261→```
+   262→
+   263→---
+   264→
+   265→# 7. WEBCAM SYSTEM
+   266→
+   267→When the user starts a simulation:
+   268→
+   269→Request browser camera permission.
+   270→
+   271→Show:
+   272→
+   273→* webcam video
+   274→* camera status
+   275→* face detected/not detected
+   276→* AI processing status
+   277→
+   278→Example:
+   279→
+   280→```text
+   281→CAMERA
+   282→● CONNECTED
+   283→
+   284→FACE
+   285→● DETECTED
+   286→
+   287→AI VISION
+   288→● ACTIVE
+   289→```
+   290→
+   291→If camera permission is denied:
+   292→
+   293→Do not crash.
+   294→
+   295→Display:
+   296→
+   297→```text
+   298→Camera unavailable
+   299→
+   300→Simulation fallback mode enabled.
+   301→You can still manually trigger detection events.
+   302→```
+   303→
+   304→Add a clear button:
+   305→
+   306→**ENABLE CAMERA**
+   307→
+   308→---
+   309→
+   310→# 8. DRIVER MONITORING
+   311→
+   312→Implement real webcam-based driver monitoring where feasible.
+   313→
+   314→Detect:
+   315→
+   316→* face
+   317→* eyes
+   318→* eye openness
+   319→* prolonged eye closure
+   320→* optional head orientation
+   321→
+   322→Use temporal logic.
+   323→
+   324→Do NOT trigger drowsiness from a single blink.
+   325→
+   326→Implement configurable values such as:
+   327→
+   328→```text
+   329→warning duration
+   330→critical duration
+   331→eye closure threshold
+   332→face absence timeout
+   333→```
+   334→
+   335→Example behavior:
+   336→
+   337→```text
+   338→Eyes open
+   339→→ NORMAL
+   340→
+   341→Eyes closed briefly
+   342→→ BLINK
+   343→
+   344→Eyes continuously closed for warning duration
+   345→→ DROWSINESS WARNING
+   346→
+   347→Eyes continuously closed for critical duration
+   348→→ CRITICAL DROWSINESS
+   349→```
+   350→
+   351→Make thresholds configurable from a Settings panel.
+   352→
+   353→---
+   354→
+   355→# 9. DROWSINESS DETECTION UI
+   356→
+   357→Show a live status card:
+   358→
+   359→```text
+   360→DROWSINESS
+   361→NORMAL
+   362→```
+   363→
+   364→When eyes remain closed:
+   365→
+   366→```text
+   367→⚠ DROWSINESS WARNING
+   368→```
+   369→
+   370→When severe:
+   371→
+   372→```text
+   373→🚨 CRITICAL DROWSINESS
+   374→```
+   375→
+   376→Display:
+   377→
+   378→* eye state
+   379→* confidence
+   380→* duration
+   381→* severity
+   382→
+   383→Example:
+   384→
+   385→```text
+   386→Eye State: CLOSED
+   387→Closure Duration: 3.4 sec
+   388→Severity: CRITICAL
+   389→```
+   390→
+   391→Use a progress indicator.
+   392→
+   393→---
+   394→
+   395→# 10. HELMET DETECTION — BIKE MODE
+   396→
+   397→For bike mode, helmet detection is mandatory.
+   398→
+   399→Create a detection layer with an interface like:
+   400→
+   401→```ts
+   402→detectHelmet(...)
+   403→```
+   404→
+   405→Use a real browser-capable model if available.
+   406→
+   407→If a reliable helmet model is not available without a backend, provide a robust fallback simulation mode.
+   408→
+   409→The interface should support states:
+   410→
+   411→```text
+   412→HELMET_DETECTED
+   413→HELMET_NOT_DETECTED
+   414→UNKNOWN
+   415→```
+   416→
+   417→The UI must never falsely imply that a simple heuristic is a highly accurate certified helmet detector.
+   418→
+   419→Display:
+   420→
+   421→```text
+   422→HELMET
+   423→✓ DETECTED
+   424→```
+   425→
+   426→or:
+   427→
+   428→```text
+   429→HELMET
+   430→✕ NOT DETECTED
+   431→```
+   432→
+   433→---
+   434→
+   435→# 11. BIKE LOGIC
+   436→
+   437→Bike rules:
+   438→
+   439→### Start blocked when:
+   440→
+   441→* helmet is not detected
+   442→* alcohol is detected
+   443→
+   444→### Start allowed when:
+   445→
+   446→* helmet detected
+   447→* alcohol safe
+   448→
+   449→State machine:
+   450→
+   451→```text
+   452→IDLE
+   453→↓
+   454→SAFETY CHECK
+   455→↓
+   456→if helmet missing → START BLOCKED
+   457→↓
+   458→if alcohol detected → START BLOCKED
+   459→↓
+   460→otherwise → READY
+   461→↓
+   462→RUNNING
+   463→```
+   464→
+   465→If alcohol is detected while moving:
+   466→
+   467→```text
+   468→ALCOHOL DETECTED
+   469→↓
+   470→WARNING
+   471→↓
+   472→MOTOR POWER REDUCED
+   473→↓
+   474→BIKE STOP
+   475→```
+   476→
+   477→Do not allow the user to restart until the unsafe condition is cleared/reset.
+   478→
+   479→---
+   480→
+   481→# 12. ALCOHOL DETECTION
+   482→
+   483→Create two modes:
+   484→
+   485→## Mode A — Simulation Trigger
+   486→
+   487→Button:
+   488→
+   489→**SIMULATE ALCOHOL**
+   490→
+   491→Clicking it changes:
+   492→
+   493→```text
+   494→alcoholDetected = true
+   495→```
+   496→
+   497→## Mode B — Sensor Simulation
+   498→
+   499→Create a simulated sensor value:
+   500→
+   501→```text
+   502→Alcohol Level: 0–100
+   503→```
+   504→
+   505→Slider:
+   506→
+   507→```text
+   508→SAFE ─────────────── DANGER
+   509→```
+   510→
+   511→Use configurable threshold.
+   512→
+   513→Example:
+   514→
+   515→```text
+   516→Alcohol Level: 72
+   517→Threshold: 40
+   518→
+   519→STATUS:
+   520→🚨 ALCOHOL DETECTED
+   521→```
+   522→
+   523→Create an animated sensor gauge.
+   524→
+   525→---
+   526→
+   527→# 13. CAR MODE
+   528→
+   529→Car mode should simulate:
+   530→
+   531→* driver presence
+   532→* drowsiness
+   533→* alcohol detection
+   534→* accident event
+   535→* controlled emergency stop
+   536→
+   537→Normal operation:
+   538→
+   539→```text
+   540→DRIVER: ALERT
+   541→ALCOHOL: SAFE
+   542→VEHICLE: RUNNING
+   543→CONTROL: MANUAL
+   544→```
+   545→
+   546→Alcohol while moving:
+   547→
+   548→```text
+   549→ALCOHOL DETECTED
+   550→↓
+   551→WARNING
+   552→↓
+   553→SPEED REDUCTION
+   554→↓
+   555→CONTROLLED STOP
+   556→```
+   557→
+   558→Drowsiness:
+   559→
+   560→```text
+   561→WARNING
+   562→↓
+   563→critical drowsiness
+   564→↓
+   565→controlled stop
+   566→```
+   567→
+   568→The car does NOT need the same roadside autonomous path behavior as the truck.
+   569→
+   570→---
+   571→
+   572→# 14. TRUCK MODE — PRIMARY FEATURE
+   573→
+   574→Truck mode is the centerpiece of the project.
+   575→
+   576→Create a top-down road simulation.
+   577→
+   578→The truck must physically move on the simulated road.
+   579→
+   580→The road should have:
+   581→
+   582→* lane
+   583→* lane markings
+   584→* road edges
+   585→* roadside area
+   586→* safe stopping zone
+   587→
+   588→Example:
+   589→
+   590→```text
+   591→════════════════════════════════════════════
+   592→|                                          |
+   593→|          ROAD                            |
+   594→|                                          |
+   595→|              🚛 → → →                   |
+   596→|                                          |
+   597→|------------------------------------------|
+   598→|              ROADSIDE                    |
+   599→|                              STOP ZONE    |
+   600→════════════════════════════════════════════
+   601→```
+   602→
+   603→Create smooth vehicle animation.
+   604→
+   605→---
+   606→
+   607→# 15. TRUCK MANUAL CONTROL
+   608→
+   609→Support:
+   610→
+   611→* Start
+   612→* Stop
+   613→* Accelerate
+   614→* Brake
+   615→* Steering left/right
+   616→
+   617→Keyboard support:
+   618→
+   619→```text
+   620→W / ↑     accelerate
+   621→S / ↓     brake
+   622→A / ←     steer left
+   623→D / →     steer right
+   624→SPACE     emergency stop
+   625→```
+   626→
+   627→Only enable manual controls while the system is in:
+   628→
+   629→```text
+   630→MANUAL MODE
+   631→```
+   632→
+   633→---
+   634→
+   635→# 16. TRUCK AUTONOMOUS SAFETY MODE
+   636→
+   637→Implement a real simulation state machine:
+   638→
+   639→```text
+   640→MANUAL
+   641→↓
+   642→RISK DETECTED
+   643→↓
+   644→WARNING
+   645→↓
+   646→CRITICAL
+   647→↓
+   648→AUTONOMOUS TAKEOVER
+   649→↓
+   650→DECELERATION
+   651→↓
+   652→ROADSIDE ALIGNMENT
+   653→↓
+   654→SAFE STOP
+   655→```
+   656→
+   657→When autonomous takeover happens:
+   658→
+   659→Disable manual controls.
+   660→
+   661→Display:
+   662→
+   663→```text
+   664→AUTONOMOUS SAFETY MODE
+   665→```
+   666→
+   667→Animate the truck:
+   668→
+   669→1. Reduce speed
+   670→2. Gradually steer toward roadside
+   671→3. Enter safe stopping lane
+   672→4. Turn steering straight
+   673→5. Stop
+   674→6. Keep hazard lights blinking
+   675→
+   676→Do not teleport the truck.
+   677→
+   678→The movement must be visibly animated.
+   679→
+   680→---
+   681→
+   682→# 17. TRUCK ALCOHOL SCENARIO
+   683→
+   684→Scenario:
+   685→
+   686→```text
+   687→TRUCK RUNNING
+   688→↓
+   689→User clicks SIMULATE ALCOHOL
+   690→↓
+   691→ALCOHOL DETECTED
+   692→↓
+   693→Warning
+   694→↓
+   695→Critical safety event
+   696→↓
+   697→Autonomous takeover
+   698→↓
+   699→Speed reduces
+   700→↓
+   701→Truck moves toward roadside
+   702→↓
+   703→Hazard lights activate
+   704→↓
+   705→Truck enters stop zone
+   706→↓
+   707→Truck stops
+   708→```
+   709→
+   710→Display an event timeline:
+   711→
+   712→```text
+   713→20:14:01  Alcohol detected
+   714→20:14:02  Driver warning issued
+   715→20:14:04  Manual control disabled
+   716→20:14:05  Autonomous safety mode activated
+   717→20:14:08  Speed reduced
+   718→20:14:11  Roadside alignment started
+   719→20:14:15  Safe stopping zone reached
+   720→20:14:16  Vehicle stopped
+   721→```
+   722→
+   723→---
+   724→
+   725→# 18. TRUCK DROWSINESS SCENARIO
+   726→
+   727→This must work from the webcam.
+   728→
+   729→Sequence:
+   730→
+   731→```text
+   732→Driver normal
+   733→↓
+   734→Driver closes eyes
+   735→↓
+   736→AI detects prolonged eye closure
+   737→↓
+   738→Drowsiness warning
+   739→↓
+   740→Buzzer/visual warning
+   741→↓
+   742→Driver remains unresponsive
+   743→↓
+   744→Critical drowsiness
+   745→↓
+   746→Autonomous takeover
+   747→↓
+   748→Truck slows
+   749→↓
+   750→Truck moves to roadside
+   751→↓
+   752→Truck stops safely
+   753→```
+   754→
+   755→Show a very obvious UI state:
+   756→
+   757→```text
+   758→🚨 CRITICAL DROWSINESS DETECTED
+   759→
+   760→Driver response: NONE
+   761→
+   762→AUTONOMOUS INTERVENTION ACTIVE
+   763→```
+   764→
+   765→---
+   766→
+   767→# 19. MANUAL DROWSINESS SIMULATION
+   768→
+   769→Because a real webcam test may not always be convenient during judging, add:
+   770→
+   771→**SIMULATE DROWSINESS**
+   772→
+   773→This should simulate prolonged eye closure while still keeping the real camera functionality.
+   774→
+   775→When enabled:
+   776→
+   777→```text
+   778→Drowsiness: SIMULATED
+   779→```
+   780→
+   781→When real vision detects it:
+   782→
+   783→```text
+   784→Drowsiness: CAMERA DETECTED
+   785→```
+   786→
+   787→Make the source visible.
+   788→
+   789→---
+   790→
+   791→# 20. ACCIDENT SIMULATION
+   792→
+   793→Add:
+   794→
+   795→**SIMULATE ACCIDENT**
+   796→
+   797→When clicked:
+   798→
+   799→```text
+   800→ACCIDENT DETECTED
+   801→```
+   802→
+   803→Simulate:
+   804→
+   805→* sudden impact
+   806→* vehicle instability
+   807→* hazard lights
+   808→* emergency stop
+   809→
+   810→For truck:
+   811→
+   812→```text
+   813→ACCIDENT DETECTED
+   814→↓
+   815→vehicle control disabled
+   816→↓
+   817→vehicle stopped
+   818→↓
+   819→emergency event logged
+   820→```
+   821→
+   822→For bike and car, stop immediately and display emergency event.
+   823→
+   824→---
+   825→
+   826→# 21. VEHICLE STATE MACHINE
+   827→
+   828→Create a clean reusable state architecture.
+   829→
+   830→Example types:
+   831→
+   832→```ts
+   833→VehicleType:
+   834→  BIKE
+   835→  CAR
+   836→  TRUCK
+   837→```
+   838→
+   839→```ts
+   840→VehicleMode:
+   841→  IDLE
+   842→  SAFETY_CHECK
+   843→  READY
+   844→  MANUAL
+   845→  WARNING
+   846→  AUTONOMOUS
+   847→  STOPPING
+   848→  STOPPED
+   849→  EMERGENCY
+   850→```
+   851→
+   852→```ts
+   853→SafetyStatus:
+   854→  SAFE
+   855→  WARNING
+   856→  CRITICAL
+   857→  EMERGENCY
+   858→```
+   859→
+   860→Do not create messy scattered boolean logic.
+   861→
+   862→Use a centralized safety engine.
+   863→
+   864→---
+   865→
+   866→# 22. CENTRAL SAFETY ENGINE
+   867→
+   868→Create a reusable function/module:
+   869→
+   870→```ts
+   871→evaluateSafety(...)
+   872→```
+   873→
+   874→It receives:
+   875→
+   876→* vehicle type
+   877→* helmet state
+   878→* alcohol state
+   879→* drowsiness state
+   880→* driver state
+   881→* accident state
+   882→* current vehicle state
+   883→
+   884→It returns:
+   885→
+   886→```ts
+   887→{
+   888→  severity,
+   889→  reason,
+   890→  recommendedAction,
+   891→  controlMode
+   892→}
+   893→```
+   894→
+   895→Example:
+   896→
+   897→```ts
+   898→{
+   899→  severity: "CRITICAL",
+   900→  reason: "Driver drowsiness",
+   901→  recommendedAction: "AUTONOMOUS_STOP",
+   902→  controlMode: "AUTONOMOUS"
+   903→}
+   904→```
+   905→
+   906→---
+   907→
+   908→# 23. VEHICLE-SPECIFIC RULE ENGINE
+   909→
+   910→Do not hard-code everything inside UI components.
+   911→
+   912→Create rules such as:
+   913→
+   914→```ts
+   915→BIKE_RULES
+   916→CAR_RULES
+   917→TRUCK_RULES
+   918→```
+   919→
+   920→Example conceptual behavior:
+   921→
+   922→### Bike
+   923→
+   924→```text
+   925→helmet missing → block start
+   926→alcohol → block/stop
+   927→critical drowsiness → warning/stop
+   928→accident → emergency stop
+   929→```
+   930→
+   931→### Car
+   932→
+   933→```text
+   934→alcohol → controlled stop
+   935→critical drowsiness → controlled stop
+   936→accident → emergency stop
+   937→```
+   938→
+   939→### Truck
+   940→
+   941→```text
+   942→alcohol → autonomous roadside stop
+   943→critical drowsiness → autonomous roadside stop
+   944→accident → emergency intervention
+   945→```
+   946→
+   947→---
+   948→
+   949→# 24. DASHBOARD TELEMETRY
+   950→
+   951→Display:
+   952→
+   953→```text
+   954→Vehicle
+   955→Speed
+   956→Acceleration
+   957→Steering
+   958→Driver
+   959→Helmet
+   960→Alcohol
+   961→Drowsiness
+   962→Face
+   963→Control mode
+   964→Safety level
+   965→```
+   966→
+   967→Use animated indicators.
+   968→
+   969→Example:
+   970→
+   971→```text
+   972→VEHICLE
+   973→🚛 TRUCK
+   974→
+   975→SPEED
+   976→████████░░ 72%
+   977→
+   978→STEERING
+   979→→ RIGHT
+   980→
+   981→DRIVER
+   982→✓ DETECTED
+   983→
+   984→ALCOHOL
+   985→✓ SAFE
+   986→
+   987→DROWSINESS
+   988→⚠ WARNING
+   989→
+   990→CONTROL
+   991→AUTONOMOUS
+   992→```
+   993→
+   994→---
+   995→
+   996→# 25. LIVE EVENT TIMELINE
+   997→
+   998→Create a professional event log.
+   999→
+  1000→Example:
+  1001→
+  1002→```text
+  1003→[INFO] Camera connected
+  1004→[INFO] Driver detected
+  1005→[INFO] Vehicle started
+  1006→[WARNING] Eye closure detected
+  1007→[WARNING] Drowsiness warning
+  1008→[CRITICAL] Driver unresponsive
+  1009→[AI] Autonomous intervention activated
+  1010→[AI] Vehicle speed reduced
+  1011→[AI] Roadside trajectory selected
+  1012→[SAFE] Vehicle stopped
+  1013→```
+  1014→
+  1015→Each event should have:
+  1016→
+  1017→* timestamp
+  1018→* event type
+  1019→* source
+  1020→* message
+  1021→
+  1022→Example source:
+  1023→
+  1024→```text
+  1025→CAMERA
+  1026→SIMULATION
+  1027→SAFETY ENGINE
+  1028→VEHICLE ENGINE
+  1029→```
+  1030→
+  1031→---
+  1032→
+  1033→# 26. AI DECISION EXPLANATION
+  1034→
+  1035→Add a panel:
+  1036→
+  1037→## WHY DID THE SYSTEM INTERVENE?
+  1038→
+  1039→Example:
+  1040→
+  1041→```text
+  1042→Trigger:
+  1043→Critical Drowsiness
+  1044→
+  1045→Evidence:
+  1046→• Eyes closed for 4.2 seconds
+  1047→• Driver face detected
+  1048→• Driver did not recover after warning
+  1049→
+  1050→Decision:
+  1051→Autonomous Safety Stop
+  1052→
+  1053→Vehicle:
+  1054→Truck
+  1055→
+  1056→Action:
+  1057→Reduce speed → move to roadside → stop
+  1058→```
+  1059→
+  1060→This is important for technology-fest judges.
+  1061→
+  1062→---
+  1063→
+  1064→# 27. REAL-TIME CAMERA OVERLAY
+  1065→
+  1066→Draw overlays on the webcam where practical.
+  1067→
+  1068→For example:
+  1069→
+  1070→```text
+  1071→FACE DETECTED
+  1072→EYES: OPEN
+  1073→DROWSINESS: 4%
+  1074→```
+  1075→
+  1076→When eyes close:
+  1077→
+  1078→```text
+  1079→FACE DETECTED
+  1080→EYES: CLOSED
+  1081→CLOSURE: 2.8s
+  1082→DROWSINESS: 81%
+  1083→```
+  1084→
+  1085→Use a professional computer-vision HUD style.
+  1086→
+  1087→---
+  1088→
+  1089→# 28. VISUAL DESIGN
+  1090→
+  1091→Design should be modern and futuristic.
+  1092→
+  1093→Theme:
+  1094→
+  1095→* dark interface
+  1096→* glassmorphism panels
+  1097→* subtle gradients
+  1098→* neon-style status indicators
+  1099→* smooth animations
+  1100→* technical dashboard
+  1101→* large readable numbers
+  1102→
+  1103→Avoid excessive decoration.
+  1104→
+  1105→The application must look like an **automotive AI command center**.
+  1106→
+  1107→Use responsive layout.
+  1108→
+  1109→It must work on:
+  1110→
+  1111→* laptop
+  1112→* desktop
+  1113→* projector screen
+  1114→
+  1115→---
+  1116→
+  1117→# 29. HOME PAGE SECTIONS
+  1118→
+  1119→Include:
+  1120→
+  1121→### Hero
+  1122→
+  1123→SMARTDRIVE AI
+  1124→
+  1125→### Vehicle selection
+  1126→
+  1127→Bike / Car / Truck
+  1128→
+  1129→### System architecture
+  1130→
+  1131→```text
+  1132→CAMERA
+  1133→↓
+  1134→AI VISION
+  1135→↓
+  1136→RISK DETECTION
+  1137→↓
+  1138→SAFETY ENGINE
+  1139→↓
+  1140→VEHICLE INTERVENTION
+  1141→```
+  1142→
+  1143→### Features
+  1144→
+  1145→* Helmet Detection
+  1146→* Alcohol Detection
+  1147→* Drowsiness Detection
+  1148→* Accident Detection
+  1149→* Autonomous Safety Intervention
+  1150→* Multi-Vehicle Support
+  1151→
+  1152→### Simulation disclaimer
+  1153→
+  1154→```text
+  1155→This software is an educational simulation prototype.
+  1156→It does not control real-world vehicles.
+  1157→```
+  1158→
+  1159→---
+  1160→
+  1161→# 30. SIMULATION CONTROL CENTER
+  1162→
+  1163→Create a panel with:
+  1164→
+  1165→```text
+  1166→START
+  1167→STOP
+  1168→RESET
+  1169→SIMULATE ALCOHOL
+  1170→SIMULATE DROWSINESS
+  1171→SIMULATE ACCIDENT
+  1172→EMERGENCY STOP
+  1173→```
+  1174→
+  1175→Buttons should change based on vehicle state.
+  1176→
+  1177→Do not allow logically invalid operations.
+  1178→
+  1179→---
+  1180→
+  1181→# 31. SETTINGS PAGE
+  1182→
+  1183→Add:
+  1184→
+  1185→### Camera Settings
+  1186→
+  1187→* camera selection
+  1188→* detection enable/disable
+  1189→
+  1190→### Drowsiness Settings
+  1191→
+  1192→* warning duration
+  1193→* critical duration
+  1194→* eye closure sensitivity
+  1195→
+  1196→### Alcohol Settings
+  1197→
+  1198→* threshold
+  1199→
+  1200→### Simulation Settings
+  1201→
+  1202→* vehicle speed
+  1203→* acceleration
+  1204→* intervention delay
+  1205→* autonomous roadside behavior
+  1206→
+  1207→### Display Settings
+  1208→
+  1209→* compact/full dashboard
+  1210→
+  1211→Save settings in localStorage.
+  1212→
+  1213→---
+  1214→
+  1215→# 32. ANALYTICS PAGE
+  1216→
+  1217→Create a simulation analytics page.
+  1218→
+  1219→Show:
+  1220→
+  1221→* total simulations
+  1222→* safety interventions
+  1223→* drowsiness events
+  1224→* alcohol events
+  1225→* accident events
+  1226→* successful safe stops
+  1227→* average intervention time
+  1228→
+  1229→Use Recharts.
+  1230→
+  1231→Create charts such as:
+  1232→
+  1233→```text
+  1234→Safety Events by Type
+  1235→```
+  1236→
+  1237→```text
+  1238→Interventions by Vehicle
+  1239→```
+  1240→
+  1241→```text
+  1242→Simulation Outcomes
+  1243→```
+  1244→
+  1245→---
+  1246→
+  1247→# 33. SESSION REPORT
+  1248→
+  1249→At the end of a simulation provide:
+  1250→
+  1251→```text
+  1252→SIMULATION REPORT
+  1253→
+  1254→Vehicle:
+  1255→Truck
+  1256→
+  1257→Duration:
+  1258→02:18
+  1259→
+  1260→Events:
+  1261→Alcohol Detection
+  1262→Drowsiness Warning
+  1263→
+  1264→Intervention:
+  1265→Autonomous Safety Stop
+  1266→
+  1267→Result:
+  1268→SAFE STOP
+  1269→
+  1270→Reason:
+  1271→Driver safety violation
+  1272→
+  1273→Intervention Time:
+  1274→8.4 sec
+  1275→```
+  1276→
+  1277→Add:
+  1278→
+  1279→**EXPORT REPORT**
+  1280→
+  1281→Generate a downloadable JSON or PDF-like printable report using browser functionality.
+  1282→
+  1283→---
+  1284→
+  1285→# 34. DEMO MODE
+  1286→
+  1287→Create a special:
+  1288→
+  1289→**TECH FEST DEMO MODE**
+  1290→
+  1291→button.
+  1292→
+  1293→When activated, provide prebuilt scenarios:
+  1294→
+  1295→### Scenario 1
+  1296→
+  1297→Bike Helmet Safety
+  1298→
+  1299→### Scenario 2
+  1300→
+  1301→Bike Alcohol Prevention
+  1302→
+  1303→### Scenario 3
+  1304→
+  1305→Car Drowsiness Stop
+  1306→
+  1307→### Scenario 4
+  1308→
+  1309→Truck Alcohol Autonomous Stop
+  1310→
+  1311→### Scenario 5
+  1312→
+  1313→Truck Drowsiness Autonomous Stop
+  1314→
+  1315→### Scenario 6
+  1316→
+  1317→Truck Accident Emergency Stop
+  1318→
+  1319→Each scenario should automatically configure the environment.
+  1320→
+  1321→For the truck scenarios, the judges should be able to watch the whole intervention without manually configuring multiple settings.
+  1322→
+  1323→---
+  1324→
+  1325→# 35. DEMO SCRIPT INSIDE THE APP
+  1326→
+  1327→For Demo Mode, show instructions:
+  1328→
+  1329→```text
+  1330→STEP 1
+  1331→Select TRUCK
+  1332→
+  1333→STEP 2
+  1334→Start vehicle
+  1335→
+  1336→STEP 3
+  1337→Trigger alcohol detection
+  1338→
+  1339→STEP 4
+  1340→Observe warning
+  1341→
+  1342→STEP 5
+  1343→Observe autonomous takeover
+  1344→
+  1345→STEP 6
+  1346→Truck moves to roadside
+  1347→
+  1348→STEP 7
+  1349→Truck stops safely
+  1350→```
+  1351→
+  1352→Add a progress indicator.
+  1353→
+  1354→---
+  1355→
+  1356→# 36. AUDIO FEEDBACK
+  1357→
+  1358→Add optional browser audio:
+  1359→
+  1360→* warning beep
+  1361→* critical alert
+  1362→* autonomous takeover alert
+  1363→* safe stop confirmation
+  1364→
+  1365→Provide:
+  1366→
+  1367→**Mute / Unmute**
+  1368→
+  1369→Do not require external audio files if Web Audio API can generate simple tones.
+  1370→
+  1371→---
+  1372→
+  1373→# 37. SAFETY STATES
+  1374→
+  1375→Use visually distinct states:
+  1376→
+  1377→```text
+  1378→SAFE
+  1379→WARNING
+  1380→CRITICAL
+  1381→AUTONOMOUS
+  1382→STOPPED
+  1383→EMERGENCY
+  1384→```
+  1385→
+  1386→The entire dashboard should visibly reflect the current state.
+  1387→
+  1388→---
+  1389→
+  1390→# 38. VEHICLE SIMULATION ENGINE
+  1391→
+  1392→Create reusable vehicle physics/simulation logic.
+  1393→
+  1394→At minimum simulate:
+  1395→
+  1396→* acceleration
+  1397→* speed
+  1398→* braking
+  1399→* steering
+  1400→* friction/deceleration
+  1401→* lane movement
+  1402→* roadside movement
+  1403→
+  1404→Keep it deterministic and stable.
+  1405→
+  1406→Do not implement physically dangerous or overly complex physics.
+  1407→
+  1408→The primary goal is a believable visual simulation.
+  1409→
+  1410→---
+  1411→
+  1412→# 39. TRUCK ROAD NAVIGATION
+  1413→
+  1414→When autonomous mode starts:
+  1415→
+  1416→Determine the target stopping point.
+  1417→
+  1418→Example:
+  1419→
+  1420→```ts
+  1421→safeStopZone = {
+  1422→  x: ...,
+  1423→  y: ...
+  1424→}
+  1425→```
+  1426→
+  1427→Create a simple trajectory planner.
+  1428→
+  1429→The truck should:
+  1430→
+  1431→```text
+  1432→current lane
+  1433→→ transition toward roadside
+  1434→→ align with safe zone
+  1435→→ decelerate
+  1436→→ stop
+  1437→```
+  1438→
+  1439→Animate the route/path.
+  1440→
+  1441→Display:
+  1442→
+  1443→```text
+  1444→AUTONOMOUS PATH
+  1445→```
+  1446→
+  1447→as a visible line or trajectory.
+  1448→
+  1449→---
+  1450→
+  1451→# 40. CONTROL LOCK
+  1452→
+  1453→During autonomous intervention:
+  1454→
+  1455→Disable:
+  1456→
+  1457→* manual acceleration
+  1458→* manual steering
+  1459→
+  1460→Display:
+  1461→
+  1462→```text
+  1463→MANUAL CONTROL LOCKED
+  1464→```
+  1465→
+  1466→After safe stop:
+  1467→
+  1468→```text
+  1469→VEHICLE STOPPED
+  1470→MANUAL CONTROL LOCKED
+  1471→
+  1472→[ RESET SCENARIO ]
+  1473→```
+  1474→
+  1475→---
+  1476→
+  1477→# 41. ARCHITECTURE
+  1478→
+  1479→Organize source code cleanly.
+  1480→
+  1481→Suggested structure:
+  1482→
+  1483→```text
+  1484→src/
+  1485→├── components/
+  1486→│   ├── CameraPanel.tsx
+  1487→│   ├── VehicleSelector.tsx
+  1488→│   ├── VehicleSimulation.tsx
+  1489→│   ├── SafetyPanel.tsx
+  1490→│   ├── TelemetryPanel.tsx
+  1491→│   ├── EventTimeline.tsx
+  1492→│   ├── ControlPanel.tsx
+  1493→│   ├── AlertBanner.tsx
+  1494→│   ├── DemoMode.tsx
+  1495→│   └── ...
+  1496→│
+  1497→├── pages/
+  1498→│   ├── Home.tsx
+  1499→│   ├── Simulation.tsx
+  1500→│   ├── Analytics.tsx
+  1501→│   └── Settings.tsx
+  1502→│
+  1503→├── ai/
+  1504→│   ├── faceDetection.ts
+  1505→│   ├── drowsinessDetection.ts
+  1506→│   ├── helmetDetection.ts
+  1507→│   └── visionTypes.ts
+  1508→│
+  1509→├── simulation/
+  1510→│   ├── vehicleEngine.ts
+  1511→│   ├── vehiclePhysics.ts
+  1512→│   ├── truckAutonomy.ts
+  1513→│   ├── safetyEngine.ts
+  1514→│   ├── vehicleRules.ts
+  1515→│   └── scenarioEngine.ts
+  1516→│
+  1517→├── hooks/
+  1518→│   ├── useCamera.ts
+  1519→│   ├── useDrowsiness.ts
+  1520→│   ├── useVehicleSimulation.ts
+  1521→│   └── useSafetyEngine.ts
+  1522→│
+  1523→├── types/
+  1524→│   └── index.ts
+  1525→│
+  1526→├── utils/
+  1527→│   ├── storage.ts
+  1528→│   ├── timestamps.ts
+  1529→│   └── audio.ts
+  1530→│
+  1531→└── App.tsx
+  1532→```
+  1533→
+  1534→You may improve the architecture if necessary.
+  1535→
+  1536→---
+  1537→
+  1538→# 42. ERROR HANDLING
+  1539→
+  1540→Handle gracefully:
+  1541→
+  1542→* camera permission denied
+  1543→* camera unavailable
+  1544→* model loading failure
+  1545→* browser does not support a feature
+  1546→* invalid simulation state
+  1547→* reset while running
+  1548→* missing model assets
+  1549→* slow processing
+  1550→
+  1551→Never allow the UI to crash.
+  1552→
+  1553→---
+  1554→
+  1555→# 43. PERFORMANCE
+  1556→
+  1557→Optimize for a normal laptop.
+  1558→
+  1559→Do not process webcam frames excessively.
+  1560→
+  1561→Use techniques such as:
+  1562→
+  1563→* requestAnimationFrame throttling
+  1564→* reduced model inference frequency
+  1565→* cleanup on unmount
+  1566→* canvas optimization
+  1567→
+  1568→Prevent memory leaks.
+  1569→
+  1570→Stop camera tracks when leaving the simulation page.
+  1571→
+  1572→---
+  1573→
+  1574→# 44. PRIVACY
+  1575→
+  1576→Camera processing should remain local wherever possible.
+  1577→
+  1578→Display:
+  1579→
+  1580→```text
+  1581→Privacy:
+  1582→Camera frames are processed locally in your browser.
+  1583→No video is uploaded by this application.
+  1584→```
+  1585→
+  1586→Do not implement unnecessary cloud upload.
+  1587→
+  1588→---
+  1589→
+  1590→# 45. ACCESSIBILITY
+  1591→
+  1592→Include:
+  1593→
+  1594→* keyboard navigation
+  1595→* readable contrast
+  1596→* tooltips
+  1597→* status text in addition to colors
+  1598→* accessible buttons
+  1599→
+  1600→---
+  1601→
+  1602→# 46. RESPONSIVE DESIGN
+  1603→
+  1604→Desktop is the primary target.
+  1605→
+  1606→But support:
+  1607→
+  1608→```text
+  1609→1024px+
+  1610→```
+  1611→
+  1612→and reasonable tablet layouts.
+  1613→
+  1614→The laptop/projector screen layout should remain clean.
+  1615→
+  1616→---
+  1617→
+  1618→# 47. DEMO DATA
+  1619→
+  1620→Include realistic initial values.
+  1621→
+  1622→Example:
+  1623→
+  1624→```text
+  1625→Vehicle Speed: 42 km/h
+  1626→Driver Confidence: 96%
+  1627→Drowsiness: 4%
+  1628→Alcohol Level: 0
+  1629→```
+  1630→
+  1631→During events update them dynamically.
+  1632→
+  1633→---
+  1634→
+  1635→# 48. IMPORTANT: REAL CAMERA + SIMULATION FALLBACK
+  1636→
+  1637→The application must support both:
+  1638→
+  1639→### REAL VISION MODE
+  1640→
+  1641→Webcam is active.
+  1642→
+  1643→Drowsiness is detected from the user's face/eyes.
+  1644→
+  1645→Helmet detection is attempted using the available vision pipeline.
+  1646→
+  1647→### DEMO/SIMULATION MODE
+  1648→
+  1649→Manual buttons can trigger:
+  1650→
+  1651→* helmet present/absent
+  1652→* alcohol
+  1653→* drowsiness
+  1654→* accident
+  1655→
+  1656→The application must show the source:
+  1657→
+  1658→```text
+  1659→SOURCE: CAMERA
+  1660→```
+  1661→
+  1662→or
+  1663→
+  1664→```text
+  1665→SOURCE: SIMULATION
+  1666→```
+  1667→
+  1668→This ensures that the technology-fest demonstration is reliable.
+  1669→
+  1670→---
+  1671→
+  1672→# 49. DO NOT FAKE AI CONFIDENCE
+  1673→
+  1674→Never display random fake confidence values as if they came from a real model.
+  1675→
+  1676→When actual AI inference is unavailable:
+  1677→
+  1678→show:
+  1679→
+  1680→```text
+  1681→SIMULATED
+  1682→```
+  1683→
+  1684→or
+  1685→
+  1686→```text
+  1687→MODEL UNAVAILABLE
+  1688→```
+  1689→
+  1690→For simulation controls, use:
+  1691→
+  1692→```text
+  1693→SIMULATION CONFIDENCE
+  1694→```
+  1695→
+  1696→instead of pretending it is actual model confidence.
+  1697→
+  1698→---
+  1699→
+  1700→# 50. PROJECT DOCUMENTATION
+  1701→
+  1702→Create a comprehensive README containing:
+  1703→
+  1704→## Project Overview
+  1705→
+  1706→## Problem Statement
+  1707→
+  1708→## Objectives
+  1709→
+  1710→## Features
+  1711→
+  1712→## System Architecture
+  1713→
+  1714→## Technology Stack
+  1715→
+  1716→## AI Pipeline
+  1717→
+  1718→## Vehicle Simulation Logic
+  1719→
+  1720→## Drowsiness Detection
+  1721→
+  1722→## Helmet Detection
+  1723→
+  1724→## Alcohol Simulation
+  1725→
+  1726→## Autonomous Truck Intervention
+  1727→
+  1728→## Installation
+  1729→
+  1730→## Running the Project
+  1731→
+  1732→## Camera Permissions
+  1733→
+  1734→## Demo Scenarios
+  1735→
+  1736→## Limitations
+  1737→
+  1738→## Future Scope
+  1739→
+  1740→## Safety Disclaimer
+  1741→
+  1742→---
+  1743→
+  1744→# 51. ABOUT LIMITATIONS
+  1745→
+  1746→Explicitly document that this is a simulation and that:
+  1747→
+  1748→* browser-based vision is not production automotive perception
+  1749→* webcam-based drowsiness detection has limitations
+  1750→* helmet estimation may require a dedicated trained model for real deployment
+  1751→* autonomous roadside behavior is simulated
+  1752→* vehicle control is not connected to real vehicles
+  1753→
+  1754→Do not oversell the prototype.
+  1755→
+  1756→---
+  1757→
+  1758→# 52. FINAL ACCEPTANCE TESTS
+  1759→
+  1760→Before considering the project complete, verify all of these:
+  1761→
+  1762→### Test 1
+  1763→
+  1764→Home page loads.
+  1765→
+  1766→### Test 2
+  1767→
+  1768→Bike selection works.
+  1769→
+  1770→### Test 3
+  1771→
+  1772→Car selection works.
+  1773→
+  1774→### Test 4
+  1775→
+  1776→Truck selection works.
+  1777→
+  1778→### Test 5
+  1779→
+  1780→Camera starts.
+  1781→
+  1782→### Test 6
+  1783→
+  1784→Camera fallback works when unavailable.
+  1785→
+  1786→### Test 7
+  1787→
+  1788→Driver face detection status updates.
+  1789→
+  1790→### Test 8
+  1791→
+  1792→Drowsiness detection works.
+  1793→
+  1794→### Test 9
+  1795→
+  1796→Manual drowsiness simulation works.
+  1797→
+  1798→### Test 10
+  1799→
+  1800→Bike cannot start without helmet.
+  1801→
+  1802→### Test 11
+  1803→
+  1804→Bike can start when helmet is detected and alcohol is safe.
+  1805→
+  1806→### Test 12
+  1807→
+  1808→Alcohol simulation blocks/stops bike.
+  1809→
+  1810→### Test 13
+  1811→
+  1812→Car alcohol event triggers controlled stop.
+  1813→
+  1814→### Test 14
+  1815→
+  1816→Car drowsiness triggers controlled stop.
+  1817→
+  1818→### Test 15
+  1819→
+  1820→Truck starts and moves.
+  1821→
+  1822→### Test 16
+  1823→
+  1824→Truck alcohol simulation triggers autonomous takeover.
+  1825→
+  1826→### Test 17
+  1827→
+  1828→Truck speed decreases.
+  1829→
+  1830→### Test 18
+  1831→
+  1832→Truck moves toward roadside.
+  1833→
+  1834→### Test 19
+  1835→
+  1836→Truck reaches safe stop zone.
+  1837→
+  1838→### Test 20
+  1839→
+  1840→Truck stops.
+  1841→
+  1842→### Test 21
+  1843→
+  1844→Truck hazard lights blink during intervention.
+  1845→
+  1846→### Test 22
+  1847→
+  1848→Truck drowsiness simulation triggers autonomous intervention.
+  1849→
+  1850→### Test 23
+  1851→
+  1852→Real webcam drowsiness can trigger intervention.
+  1853→
+  1854→### Test 24
+  1855→
+  1856→Accident simulation works.
+  1857→
+  1858→### Test 25
+  1859→
+  1860→Event timeline records events.
+  1861→
+  1862→### Test 26
+  1863→
+  1864→Analytics page displays session statistics.
+  1865→
+  1866→### Test 27
+  1867→
+  1868→Settings persist.
+  1869→
+  1870→### Test 28
+  1871→
+  1872→Reset returns system to a clean state.
+  1873→
+  1874→### Test 29
+  1875→
+  1876→No major console errors.
+  1877→
+  1878→### Test 30
+  1879→
+  1880→Application works after a fresh:
+  1881→
+  1882→```bash
+  1883→npm install
+  1884→npm run dev
+  1885→```
+  1886→
+  1887→---
+  1888→
+  1889→# 53. VERY IMPORTANT DEVELOPMENT INSTRUCTION
+  1890→
+  1891→Do not only provide an architecture or explanation.
+  1892→
+  1893→Actually generate the complete implementation.
+  1894→
+  1895→When a technology choice has multiple options, choose the option that gives the most reliable **local demo experience**.
+  1896→
+  1897→Prioritize:
+  1898→
+  1899→1. Working functionality
+  1900→2. Stable simulation
+  1901→3. Real webcam integration
+  1902→4. Clear AI/simulation distinction
+  1903→5. Professional UI
+  1904→6. Clean architecture
+  1905→7. Tech-fest presentation quality
+  1906→
+  1907→Do not make the application dependent on paid APIs.
+  1908→
+  1909→Do not require a backend unless it provides a meaningful capability.
+  1910→
+  1911→Do not require Arduino/ESP32 for the core demo.
+  1912→
+  1913→---
+  1914→
+  1915→# 54. FINAL USER EXPERIENCE
+  1916→
+  1917→The ideal final demo should allow someone to do this:
+  1918→
+  1919→```text
+  1920→Open SMARTDRIVE AI
+  1921→        ↓
+  1922→Select TRUCK
+  1923→        ↓
+  1924→Camera turns on
+  1925→        ↓
+  1926→Start simulation
+  1927→        ↓
+  1928→Truck begins moving
+  1929→        ↓
+  1930→Driver closes eyes
+  1931→        ↓
+  1932→AI detects drowsiness
+  1933→        ↓
+  1934→Warning appears
+  1935→        ↓
+  1936→Critical drowsiness detected
+  1937→        ↓
+  1938→AUTONOMOUS MODE
+  1939→        ↓
+  1940→Manual control disabled
+  1941→        ↓
+  1942→Truck slows down
+  1943→        ↓
+  1944→Truck steers toward roadside
+  1945→        ↓
+  1946→Hazard lights activate
+  1947→        ↓
+  1948→Truck enters SAFE STOP ZONE
+  1949→        ↓
+  1950→Truck stops
+  1951→        ↓
+  1952→Simulation report generated
+  1953→```
+  1954→
+  1955→Then the user can reset and demonstrate:
+  1956→
+  1957→```text
+  1958→TRUCK RUNNING
+  1959→↓
+  1960→SIMULATE ALCOHOL
+  1961→↓
+  1962→ALCOHOL DETECTED
+  1963→↓
+  1964→AUTONOMOUS TAKEOVER
+  1965→↓
+  1966→ROADSIDE STOP
+  1967→```
+  1968→
+  1969→Then demonstrate the bike:
+  1970→
+  1971→```text
+  1972→BIKE
+  1973→↓
+  1974→No helmet
+  1975→↓
+  1976→START BLOCKED
+  1977→
+  1978→Helmet detected
+  1979→↓
+  1980→START ENABLED
+  1981→```
+  1982→
+  1983→This complete multi-vehicle workflow is the target.
+  1984→
+  1985→---
+  1986→
+  1987→# 55. OUTPUT EXPECTATION
+  1988→
+  1989→Work directly on the codebase.
+  1990→
+  1991→After implementation, provide:
+  1992→
+  1993→1. Complete project files
+  1994→2. File/folder structure
+  1995→3. Installation commands
+  1996→4. Run commands
+  1997→5. Camera setup instructions
+  1998→6. Demo instructions
+  1999→7. List of implemented features
+  2000→8. Known limitations
+
+[showing lines 1-2000 of 2006; use offset=2001 with limit to continue reading]
