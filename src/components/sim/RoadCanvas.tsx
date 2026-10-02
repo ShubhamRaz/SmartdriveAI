@@ -8,32 +8,14 @@
  * streams past the camera so motion is unmistakable at any speed:
  *   - animated center lane dashes (scroll with world position)
  *   - roadside lamp posts + trees (parallax scenery)
- *   - oncoming traffic in the opposite lane
  *   - speed streaks at highway pace, brake lights under deceleration
  *   - AUTOPILOT / HIGH SPEED HUD chip while automation drives
+ * Single-vehicle road by design: no ambient traffic around the player.
  */
 
 import { useEffect, useRef } from "react";
 import { simulationEngine } from "@/lib/simulation/engine";
 import { ROAD_GEOMETRY, VEHICLE_SPECS } from "@/lib/simulation/vehiclePhysics";
-
-interface Oncoming {
-  pos: number; // world x (meters) — decreases over time
-  speed: number; // m/s toward -x
-  lateral: number; // negative = opposite lane
-  len: number;
-  wid: number;
-  color: string;
-}
-
-const TRAFFIC_COLORS = [
-  "#8ea0ad",
-  "#64748b",
-  "#a8a29e",
-  "#7d8b96",
-  "#5d6d7e",
-  "#9aa7b0",
-];
 
 /** deterministic pseudo-random from an index (stable scenery per frame) */
 function hash01(i: number): number {
@@ -56,19 +38,6 @@ export function RoadCanvas() {
     let W = 0;
     let H = 0;
 
-    // ---- oncoming traffic state (persists across frames) ----
-    const traffic: Oncoming[] = [];
-    const spawnAhead = (camX: number, viewM: number, minAhead: number) => {
-      traffic.push({
-        pos: camX + minAhead + Math.random() * Math.max(30, viewM * 0.8),
-        speed: 8 + Math.random() * 12, // 29…72 km/h oncoming
-        lateral: -1.35 - Math.random() * 0.9, // opposite lane band
-        len: 4 + Math.random() * 2.2,
-        wid: 1.8 + Math.random() * 0.5,
-        color: TRAFFIC_COLORS[Math.floor(Math.random() * TRAFFIC_COLORS.length)],
-      });
-    };
-
     const resize = () => {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       W = wrap.clientWidth;
@@ -83,14 +52,9 @@ export function RoadCanvas() {
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
 
-    let last = 0;
-    let seeded = false;
-
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw);
       if (W === 0 || H === 0) return;
-      const dt = last ? Math.min(0.05, (now - last) / 1000) : 0.016;
-      last = now;
 
       const eng = simulationEngine;
       const pxm = Math.max(7, Math.min(W / 78, H / 17));
@@ -101,17 +65,6 @@ export function RoadCanvas() {
         (wx - camX) * pxm,
         cy + wy * pxm,
       ];
-
-      // seed + recycle oncoming traffic
-      if (!seeded) {
-        seeded = true;
-        for (let i = 0; i < 5; i++) spawnAhead(camX, viewM, 8 + i * (viewM / 5));
-      }
-      for (const t of traffic) t.pos -= t.speed * dt;
-      for (let i = 0; i < traffic.length; i++) {
-        if (traffic[i].pos < camX - 18) traffic.splice(i, 1);
-      }
-      while (traffic.length < 5) spawnAhead(camX, viewM, 12);
 
       const wobble = eng.snapshot().accidentWobble;
       ctx.save();
@@ -232,34 +185,6 @@ export function RoadCanvas() {
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.lineDashOffset = 0;
-
-      // ---------------- oncoming traffic (opposite lane) ----------------
-      for (const t of traffic) {
-        const [tx, ty] = w2s(t.pos, t.lateral);
-        if (tx < -80 || tx > W + 80) continue;
-        const TL = t.len * pxm;
-        const TW = t.wid * pxm;
-        ctx.save();
-        ctx.translate(tx, ty);
-        ctx.fillStyle = t.color;
-        roundRect(ctx, -TL / 2, -TW / 2, TL, TW, TW * 0.38);
-        ctx.fill();
-        ctx.fillStyle = "rgba(15,23,42,0.8)";
-        roundRect(ctx, -TL * 0.18, -TW / 2 + 2, TL * 0.32, TW - 4, 2.5);
-        ctx.fill();
-        // oncoming headlights (facing -x) + glow
-        const glow = ctx.createRadialGradient(-TL / 2 - 3, 0, 1, -TL / 2 - 3, 0, pxm * 2.4);
-        glow.addColorStop(0, "rgba(255,247,214,0.30)");
-        glow.addColorStop(1, "rgba(255,247,214,0)");
-        ctx.fillStyle = glow;
-        ctx.fillRect(-TL / 2 - pxm * 2.4, -TW, pxm * 2.8, TW * 2);
-        ctx.fillStyle = "rgba(255,250,220,0.95)";
-        ctx.beginPath();
-        ctx.arc(-TL / 2 + 1.5, -TW / 3, 1.8, 0, Math.PI * 2);
-        ctx.arc(-TL / 2 + 1.5, TW / 3, 1.8, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
 
       // ---------------- speed streaks (highway motion cue) ----------------
       const kmhNow = eng.kin.speed * 3.6;

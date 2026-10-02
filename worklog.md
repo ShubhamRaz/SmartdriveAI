@@ -79,3 +79,18 @@ Stage Summary:
 - Browser E2E: START → AUTOPILOT → truck 0→68 km/h cruise; HIGH SPEED → 90 km/h (top speed), ODO accumulating, ROADSIDE OFFSET 0.0 m (lane keeping); S-brake disengages with event "Autopilot disengaged — driver brake input"; re-engage returns to 68; RESET clean; manual W-hold 0→24 km/h in 3 s; pedals confirmed absent from DOM
 - Screenshots: verify-highspeed-road.png (drive-mode buttons), verify-road-scene.png (traffic + lamps + AP HUD at 89 km/h)
 - bun run lint + npx tsc --noEmit clean; fresh page load error-free
+
+---
+Task ID: 5
+Agent: main (Super Z)
+Task: User feedback — "why you added extra traffic cars, just bike is enough" (with screenshot of oncoming cars around a bike).
+
+Work Log:
+- RoadCanvas.tsx: removed the ambient oncoming traffic system entirely — Oncoming interface, TRAFFIC_COLORS palette, spawn/recycle logic, dt tracking (no longer needed) and the opposite-lane draw block; doc comment now states "Single-vehicle road by design: no ambient traffic around the player"
+- Motion cues retained so the scene still reads as moving: scrolling center dashes (lineDashOffset from world position), roadside trees + street lamps + reflector posts, speed streaks above 28 km/h, brake lights, AP HUD chip
+- bun run lint + npx tsc --noEmit clean
+
+Stage Summary:
+- Browser E2E: Simulation view → START → AUTOPILOT — road renders only the player vehicle cruising (AUTOPILOT · CRUISE chip, ODO accumulating, 0.0 m offset), zero page errors
+- Screenshot: verify-no-traffic.png (clean single-vehicle road with scenery)
+- Rationale noted for user: traffic was a motion cue only; removed per preference — scrolling dashes/scenery now carry the motion signal
