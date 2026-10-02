@@ -50,6 +50,7 @@ export interface EngineSnapshot {
   engineOn: boolean;
   moving: boolean;
   autopilot: boolean;
+  highSpeed: boolean;
   stoppedByIntervention: boolean;
   speedKmh: number;
   accelMs2: number;
@@ -120,6 +121,7 @@ export class SimulationEngine {
   hazardsOn = false;
   demoAutoThrottle = false;
   autopilot = false;
+  highSpeed = false;
 
   kin = {
     speed: 0,
@@ -132,9 +134,6 @@ export class SimulationEngine {
     headingDeg: 0,
     accel: 0,
   };
-
-  /** on-screen drive controls (touch/mouse pedals) — merged with keyboard */
-  pad = { throttle: 0, brake: 0, steer: 0 };
 
   helmet: HelmetState = { state: "HELMET_NOT_DETECTED", source: "SIMULATION" };
   alcohol: AlcoholState = {
@@ -233,7 +232,7 @@ export class SimulationEngine {
     this.helmetCheckAnnounced = false;
     this.startBlockedReason = null;
     this.autopilot = false;
-    this.pad = { throttle: 0, brake: 0, steer: 0 };
+    this.highSpeed = false;
     this.emit("INFO", "SAFETY ENGINE", "Pre-start safety checks running…");
     playCue("START");
   }
@@ -262,17 +261,65 @@ export class SimulationEngine {
       this.emit(
         "AI",
         "VEHICLE ENGINE",
-        `AUTOPILOT engaged — cruising at ${this.settings.cruiseSpeed[this.vehicleType]} km/h with lane keeping`,
+        `AUTOPILOT engaged — cruising at ${
+          this.highSpeed ? this.maxSpeedKmh() : this.settings.cruiseSpeed[this.vehicleType]
+        } km/h with lane keeping`,
       );
       playCue("TAKEOVER");
     } else {
+      this.highSpeed = false;
       this.emit("INFO", "VEHICLE ENGINE", "Autopilot disengaged — manual control restored");
+    }
+  }
+
+  /** km/h ceiling used by HIGH SPEED mode (= vehicle top speed) */
+  maxSpeedKmh(): number {
+    return Math.round(VEHICLE_SPECS[this.vehicleType].maxSpeed * 3.6);
+  }
+
+  /**
+   * HIGH SPEED profile: raises the autopilot cruise target to the vehicle's
+   * top speed. Engaging it auto-engages autopilot, so one click starts driving.
+   * Keyboard: H.
+   */
+  toggleHighSpeed() {
+    if (this.controlLocked || this.demoAutoThrottle) return;
+    if (
+      this.mode !== "READY" &&
+      this.mode !== "MANUAL" &&
+      this.mode !== "WARNING"
+    )
+      return;
+    this.highSpeed = !this.highSpeed;
+    if (this.highSpeed) {
+      if (!this.autopilot) {
+        this.autopilot = true;
+        this.emit(
+          "AI",
+          "VEHICLE ENGINE",
+          `AUTOPILOT engaged — HIGH SPEED ${this.maxSpeedKmh()} km/h with lane keeping`,
+        );
+      } else {
+        this.emit(
+          "AI",
+          "VEHICLE ENGINE",
+          `HIGH SPEED engaged — autopilot target raised to ${this.maxSpeedKmh()} km/h`,
+        );
+      }
+      playCue("TAKEOVER");
+    } else {
+      this.emit(
+        "INFO",
+        "VEHICLE ENGINE",
+        `High speed off — autopilot cruising at ${this.settings.cruiseSpeed[this.vehicleType]} km/h`,
+      );
     }
   }
 
   private disengageAutopilot(reason: string) {
     if (!this.autopilot) return;
     this.autopilot = false;
+    this.highSpeed = false;
     this.emit("INFO", "SAFETY ENGINE", `Autopilot disengaged — ${reason}`);
   }
 
@@ -390,6 +437,7 @@ export class SimulationEngine {
     this.powerLimit = 1;
     this.hazardsOn = false;
     this.autopilot = false;
+    this.highSpeed = false;
     this.kin = {
       speed: 0,
       position: 0,
@@ -401,7 +449,6 @@ export class SimulationEngine {
       headingDeg: 0,
       accel: 0,
     };
-    this.pad = { throttle: 0, brake: 0, steer: 0 };
     this.helmet = { state: "HELMET_NOT_DETECTED", source: "SIMULATION" };
     this.alcohol = {
       level: 0,
@@ -549,19 +596,14 @@ export class SimulationEngine {
   }
 
   private tickDriving(dt: number, s: AppSettings) {
-    // manual / warning driving: gather inputs (keyboard channel + on-screen pad)
+    // manual / warning driving: keyboard channel (demo mode auto-throttles)
     let throttle = this.kin.throttle;
-    let brake = this.kin.brake;
-    let steer = this.kin.steering;
+    const brake = this.kin.brake;
+    const steer = this.kin.steering;
 
     if (this.demoAutoThrottle) {
       const cruise = (s.cruiseSpeed[this.vehicleType] / 3.6) * 0.92;
       throttle = this.kin.speed < cruise ? 1 : 0.05;
-    } else {
-      // merge on-screen pedal input (strongest input wins)
-      throttle = Math.max(throttle, this.pad.throttle);
-      brake = Math.max(brake, this.pad.brake);
-      steer = Math.max(-1, Math.min(1, steer + this.pad.steer));
     }
 
     const res = stepPhysics(
@@ -592,14 +634,15 @@ export class SimulationEngine {
   /** autopilot chauffeur: cruise control + lane keeping toward lane center */
   private tickAutopilot(dt: number) {
     // driver brake input disengages autopilot (same convention as real ADAS)
-    const brakeInput = Math.max(this.kin.brake, this.pad.brake);
-    if (brakeInput > 0.2) {
+    if (this.kin.brake > 0.2) {
       this.disengageAutopilot("driver brake input");
       this.tickDriving(dt, this.settings);
       return;
     }
 
-    const cruise = this.settings.cruiseSpeed[this.vehicleType] / 3.6;
+    const cruise = this.highSpeed
+      ? VEHICLE_SPECS[this.vehicleType].maxSpeed
+      : this.settings.cruiseSpeed[this.vehicleType] / 3.6;
     const err = cruise - this.kin.speed;
     const throttle = err > 0.3 ? Math.min(1, 0.25 + err * 0.6) : err < -0.6 ? 0 : 0.08;
     const res = stepPhysics(
@@ -1151,12 +1194,13 @@ export class SimulationEngine {
       engineOn: this.engineOn,
       moving: this.kin.speed > 0.5,
       autopilot: this.autopilot,
+      highSpeed: this.highSpeed,
       stoppedByIntervention: this.stoppedByIntervention,
       speedKmh: this.kin.speed * 3.6,
       accelMs2: this.kin.accel,
-      steer: Math.max(-1, Math.min(1, this.kin.steering + this.pad.steer)),
-      throttle: Math.max(this.kin.throttle, this.pad.throttle),
-      brake: Math.max(this.kin.brake, this.pad.brake),
+      steer: this.kin.steering,
+      throttle: this.kin.throttle,
+      brake: this.kin.brake,
       odometerM: this.kin.odometer,
       lateral: this.kin.lateral,
       headingDeg: this.kin.headingDeg,
@@ -1218,16 +1262,6 @@ export class SimulationEngine {
     this.kin.brake = v;
   }
 
-  /**
-   * On-screen drive controls (touch / mouse pedals). Deliberately ungated so a
-   * released pedal can always zero itself out; the values are only consumed by
-   * tickDriving while manual driving modes are active.
-   */
-  setPadInput(throttle: number, brake: number, steer: number) {
-    this.pad.throttle = Math.max(0, Math.min(1, throttle));
-    this.pad.brake = Math.max(0, Math.min(1, brake));
-    this.pad.steer = Math.max(-1, Math.min(1, steer));
-  }
 }
 
 /* --------------------------------------------------------------------------

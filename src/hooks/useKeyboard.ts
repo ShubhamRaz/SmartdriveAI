@@ -5,10 +5,10 @@
  * inside the engine):
  *   W / ↑  accelerate     S / ↓  brake
  *   A / ←  steer left     D / →  steer right
- *   SPACE  emergency stop   P  toggle autopilot
+ *   SPACE  emergency stop   P  autopilot   H  high speed
  *
  * Event-driven: input is only written to the engine when a key state actually
- * changes, so the on-screen pad channel is never stomped by an idle poll.
+ * changes, so no idle polling ever stomps vehicle state.
  */
 
 import { useEffect } from "react";
@@ -56,7 +56,7 @@ export function useKeyboard(active: boolean) {
 
     const onKeyDown = (e: KeyboardEvent) => {
       const k = normalize(e.key);
-      if (k !== "p" && !CONTROL_KEYS.has(k)) return;
+      if (k !== "p" && k !== "h" && !CONTROL_KEYS.has(k)) return;
       // don't hijack keys while typing in inputs
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
@@ -68,6 +68,11 @@ export function useKeyboard(active: boolean) {
       if (k === "p") {
         // P toggles autopilot; ignore auto-repeat so holding P doesn't flicker
         if (!e.repeat) simulationEngine.toggleAutopilot();
+        return;
+      }
+      if (k === "h") {
+        // H toggles the HIGH SPEED autopilot profile
+        if (!e.repeat) simulationEngine.toggleHighSpeed();
         return;
       }
       if (!pressed.has(k)) {

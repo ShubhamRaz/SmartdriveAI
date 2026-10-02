@@ -60,3 +60,22 @@ Stage Summary:
 - Browser E2E verified: click engage → CAR 0→79 km/h holding cruise target 80 with 0.0 m roadside offset over 9 s; brake pedal disengages (event "Autopilot disengaged — driver brake input"); P key toggles both ways; RESET clears AP; CONTROL chip + [AI] timeline events correct
 - Screenshot: verify-autopilot.png (panel with AP toggle, dimmed while engine off)
 - Demo scenarios unaffected: AP toggle disabled while demo runner active, demoAutoThrottle path untouched
+
+---
+Task ID: 4
+Agent: main (Super Z)
+Task: User request — "remove driving controls, near autopilot add button for high speed, improve the simulation (vehicle not moving / should move on road)".
+
+Work Log:
+- engine.ts: added `highSpeed` flag + toggleHighSpeed() — raises AP cruise target to VEHICLE_SPECS top speed (CAR 120 / TRUCK 90 / BIKE 80 km/h) and auto-engages autopilot so one click starts driving; keyboard H. Autopilot/highSpeed cleared together on manual disengage, brake input, operator stop, safety intervention, emergency, start() and reset(); snapshot exposes `highSpeed`; AP engage message shows the actual target (cruise vs high speed)
+- Removed the on-screen pad channel entirely: deleted DriveControls.tsx (pedals panel), removed pad field / setPadInput / pad merges from engine.ts (tickDriving, tickAutopilot, snapshot, start, reset); keyboard (WASD/arrows/SPACE) is the only manual channel
+- ControlPanel.tsx: new DRIVE MODE row under primary controls — AUTOPILOT (cyan glow when on) + HIGH SPEED (amber glow when on) side by side, both disabled unless engine running, manual control, no demo; dynamic status line (AP cruise / HIGH SPEED target / standstill pulse "Vehicle at 0 km/h — press AUTOPILOT or HIGH SPEED to move (or hold W / ↑)" / engine-off / locked guidance); header chip "WASD · P · H · SPACE"
+- useKeyboard.ts: H toggles high speed (e.repeat guarded); doc comments updated
+- RoadCanvas.tsx motion overhaul (the "vehicle doesn't move on road" complaint): center lane dashes now scroll with world position via lineDashOffset (was static setLineDash — biggest cause of "not moving" look); added oncoming traffic (5 recycled cars in opposite lane with headlight glow), roadside trees + street lamps with light pools, reflector posts, speed streaks above 28 km/h, brake lights (kin.brake or accel < -0.45), AUTOPILOT · CRUISE / HIGH SPEED HUD chip top-center (cyan/amber pulse); fixed duplicate shL unused var; dt-clamped rAF loop
+- README: driving section rewritten (keyboard table + Drive Mode buttons, no pedals)
+- Note: 2 transient dev.log TypeErrors ("reading 'steer'") were from mid-edit hot reloads (snapshot() ran while pad field was removed between edit batches); final code has zero pad references, fresh-load E2E shows no page errors
+
+Stage Summary:
+- Browser E2E: START → AUTOPILOT → truck 0→68 km/h cruise; HIGH SPEED → 90 km/h (top speed), ODO accumulating, ROADSIDE OFFSET 0.0 m (lane keeping); S-brake disengages with event "Autopilot disengaged — driver brake input"; re-engage returns to 68; RESET clean; manual W-hold 0→24 km/h in 3 s; pedals confirmed absent from DOM
+- Screenshots: verify-highspeed-road.png (drive-mode buttons), verify-road-scene.png (traffic + lamps + AP HUD at 89 km/h)
+- bun run lint + npx tsc --noEmit clean; fresh page load error-free

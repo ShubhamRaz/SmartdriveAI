@@ -173,14 +173,16 @@ Open the printed localhost URL in Chrome/Edge. The application compiles and runs
 ```
 W / ↑    accelerate        S / ↓    brake
 A / ←    steer left        D / →    steer right
-SPACE    emergency stop    P        toggle autopilot
+SPACE    emergency stop    P        autopilot on/off
+H        high speed on/off
 ```
 
-The same actions are available as on-screen touch/mouse controls (steer ◀ ▶, BRAKE and GAS pedals) in the Drive Controls panel — no keyboard required.
+### Drive Mode buttons (Simulation Controls panel)
 
-### Autopilot
+- **AUTOPILOT** — cruise control + lane keeping (keyboard: **P**). Cruises at the vehicle's configured cruise speed (Settings → per-vehicle cruise target) and keeps the lane centered.
+- **HIGH SPEED** — raises the autopilot target to the vehicle's top speed (CAR 120 / TRUCK 90 / BIKE 80 km/h) and auto-engages autopilot if it is off (keyboard: **H**).
 
-Toggle with **P** or the `AUTOPILOT` button (engine running, manual control available, outside demo scenarios). The AI chauffeur cruises at the vehicle's configured cruise speed (Settings → per-vehicle cruise target) and keeps the lane centered. Autopilot disengages automatically on driver brake input, **P**, a manual/electric stop request, or any safety intervention (controlled stop, autonomous takeover, emergency stop) — the safety engine always outranks the chauffeur.
+Autopilot disengages automatically on driver brake input (**S / ↓**), **P**, a manual/electric stop request, or any safety intervention (controlled stop, autonomous takeover, emergency stop) — the safety engine always outranks the chauffeur, and HIGH SPEED switches off with it.
 
 Controls are disabled automatically during WARNING (still drivable), AUTONOMOUS, STOPPING, STOPPED and EMERGENCY states.
 

@@ -1,7 +1,18 @@
 "use client";
 
+/**
+ * ControlPanel — primary simulation controls.
+ *
+ * The DRIVE MODE row holds the two driving automation buttons:
+ *   AUTOPILOT  — cruise control + lane keeping (keyboard: P)
+ *   HIGH SPEED — raises the autopilot target to the vehicle's top speed and
+ *                auto-engages autopilot (keyboard: H)
+ * Manual driving stays available via W/A/S/D keys.
+ */
+
 import { useStore } from "@/lib/store";
 import { simulationEngine } from "@/lib/simulation/engine";
+import { VEHICLE_SPECS } from "@/lib/simulation/vehiclePhysics";
 import {
   Play,
   Square,
@@ -13,11 +24,15 @@ import {
   Lock,
   HardHat,
   Keyboard,
+  Bot,
+  Gauge,
 } from "lucide-react";
 import type { VehicleType } from "@/lib/types";
 
 export function ControlPanel() {
   const snap = useStore((s) => s.snap);
+  const demoActive = useStore((s) => s.demo.active);
+  const cruise = useStore((s) => s.settings.cruiseSpeed[s.snap.vehicleType]);
   const start = useStore((s) => s.start);
   const stop = useStore((s) => s.stop);
   const reset = useStore((s) => s.reset);
@@ -33,15 +48,22 @@ export function ControlPanel() {
   const manualControl =
     !snap.controlLocked &&
     (snap.mode === "READY" || snap.mode === "MANUAL" || snap.mode === "WARNING");
+  const driveReady = manualControl && !demoActive;
   const drowsySimOn = simulationEngine.simDrowsiness;
   const helmetWorn = snap.helmet.state === "HELMET_DETECTED";
+  const targetKmh = snap.highSpeed
+    ? Math.round(VEHICLE_SPECS[snap.vehicleType].maxSpeed * 3.6)
+    : cruise;
+
+  const driveBtn =
+    "flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border text-xs font-bold tracking-wide transition-colors disabled:opacity-35 disabled:cursor-not-allowed";
 
   return (
     <div className="sd-panel p-4">
       <div className="flex items-center justify-between">
         <span className="sd-panel-title">Simulation Controls</span>
         <span className="hidden sm:flex items-center gap-1 text-[9px] text-white/30 tracking-wider">
-          <Keyboard className="h-3 w-3" /> W/A/S/D + SPACE
+          <Keyboard className="h-3 w-3" /> WASD · P · H · SPACE
         </span>
       </div>
 
@@ -73,6 +95,36 @@ export function ControlPanel() {
           className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-red-500/90 hover:bg-red-500 disabled:bg-white/6 disabled:text-white/30 text-white text-xs font-bold transition-colors"
         >
           <AlertOctagon className="h-3.5 w-3.5" /> EMERGENCY
+        </button>
+      </div>
+
+      {/* drive mode: autopilot + high speed */}
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button
+          onClick={() => simulationEngine.toggleAutopilot()}
+          disabled={!driveReady}
+          aria-pressed={snap.autopilot}
+          className={`${driveBtn} ${
+            snap.autopilot
+              ? "bg-cyan-400/25 border-cyan-300/60 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.35)]"
+              : "bg-white/6 hover:bg-white/12 border-white/12 text-white/75"
+          }`}
+        >
+          <Bot className="h-3.5 w-3.5" />
+          {snap.autopilot ? "AUTOPILOT: ON" : "AUTOPILOT"}
+        </button>
+        <button
+          onClick={() => simulationEngine.toggleHighSpeed()}
+          disabled={!driveReady}
+          aria-pressed={snap.highSpeed}
+          className={`${driveBtn} ${
+            snap.highSpeed
+              ? "bg-amber-400/25 border-amber-300/60 text-amber-100 shadow-[0_0_18px_rgba(251,191,36,0.4)]"
+              : "bg-white/6 hover:bg-white/12 border-white/12 text-white/75"
+          }`}
+        >
+          <Gauge className="h-3.5 w-3.5" />
+          {snap.highSpeed ? "HIGH SPEED: ON" : "HIGH SPEED"}
         </button>
       </div>
 
@@ -138,6 +190,44 @@ export function ControlPanel() {
         </span>
       </div>
 
+      {/* drive status / guidance (fixed height avoids layout jumps) */}
+      <div className="mt-2.5 min-h-[18px]">
+        {manualControl && snap.autopilot ? (
+          <div
+            className={`flex items-center gap-1.5 text-[10px] font-bold tracking-wide ${
+              snap.highSpeed ? "text-amber-300" : "text-cyan-300"
+            }`}
+          >
+            <Bot className="h-3 w-3 shrink-0" />
+            {snap.highSpeed
+              ? `HIGH SPEED AUTOPILOT — target ${targetKmh} km/h + lane keeping · S/↓ brake, H or P to disengage`
+              : `AUTOPILOT DRIVING — cruise ${cruise} km/h + lane keeping · H for high speed · S/↓ brake or P to disengage`}
+          </div>
+        ) : manualControl && snap.speedKmh < 1 ? (
+          <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-300 tracking-wide sd-pulse">
+            <Play className="h-3 w-3 fill-current shrink-0" />
+            Vehicle at 0 km/h — press AUTOPILOT or HIGH SPEED to move (or hold W / ↑).
+          </div>
+        ) : manualControl ? (
+          <div className="flex items-center gap-1.5 text-[10px] text-white/35">
+            <Keyboard className="h-3 w-3 shrink-0" />
+            Manual: W/↑ throttle · S/↓ brake · A/D steer · P autopilot · H high speed · SPACE stop
+          </div>
+        ) : engineOff ? (
+          <div className="text-[10px] text-white/40">
+            Press START — then drive with AUTOPILOT / HIGH SPEED buttons or W keys.
+            {snap.vehicleType === "BIKE" &&
+              snap.helmet.state !== "HELMET_DETECTED" &&
+              " Bike needs HELMET: ON."}
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 text-[10px] text-amber-200/70">
+            <Lock className="h-3 w-3 shrink-0" />
+            Manual controls locked — AI / safety system in charge. Press RESET to drive again.
+          </div>
+        )}
+      </div>
+
       {snap.startBlockedReason && engineOff && (
         <div className="mt-2.5 rounded-lg border border-red-400/40 bg-red-500/12 px-3 py-2 text-xs font-bold text-red-200 tracking-wide">
           ⛔ START BLOCKED — {snap.startBlockedReason}
@@ -150,13 +240,6 @@ export function ControlPanel() {
         <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-200">
           <Lock className="h-3.5 w-3.5" /> MANUAL CONTROL LOCKED — press RESET to
           run a new scenario
-        </div>
-      )}
-      {manualControl && (
-        <div className="mt-2.5 text-[10px] text-white/35 flex items-center gap-1.5">
-          <Keyboard className="h-3 w-3" />
-          Manual driving: hold GAS pedal or W/↑ throttle · S/↓ brake · A/← D/→
-          steer · P autopilot · SPACE emergency stop
         </div>
       )}
     </div>

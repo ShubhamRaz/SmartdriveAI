@@ -2,13 +2,44 @@
 
 /**
  * Top-down road simulation canvas.
+ *
  * Reads the simulation engine directly every animation frame (no React
- * re-renders) for a smooth, believable vehicle animation.
+ * re-renders) for a smooth, believable vehicle animation. The whole scene
+ * streams past the camera so motion is unmistakable at any speed:
+ *   - animated center lane dashes (scroll with world position)
+ *   - roadside lamp posts + trees (parallax scenery)
+ *   - oncoming traffic in the opposite lane
+ *   - speed streaks at highway pace, brake lights under deceleration
+ *   - AUTOPILOT / HIGH SPEED HUD chip while automation drives
  */
 
 import { useEffect, useRef } from "react";
 import { simulationEngine } from "@/lib/simulation/engine";
 import { ROAD_GEOMETRY, VEHICLE_SPECS } from "@/lib/simulation/vehiclePhysics";
+
+interface Oncoming {
+  pos: number; // world x (meters) — decreases over time
+  speed: number; // m/s toward -x
+  lateral: number; // negative = opposite lane
+  len: number;
+  wid: number;
+  color: string;
+}
+
+const TRAFFIC_COLORS = [
+  "#8ea0ad",
+  "#64748b",
+  "#a8a29e",
+  "#7d8b96",
+  "#5d6d7e",
+  "#9aa7b0",
+];
+
+/** deterministic pseudo-random from an index (stable scenery per frame) */
+function hash01(i: number): number {
+  const s = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
 
 export function RoadCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -25,6 +56,19 @@ export function RoadCanvas() {
     let W = 0;
     let H = 0;
 
+    // ---- oncoming traffic state (persists across frames) ----
+    const traffic: Oncoming[] = [];
+    const spawnAhead = (camX: number, viewM: number, minAhead: number) => {
+      traffic.push({
+        pos: camX + minAhead + Math.random() * Math.max(30, viewM * 0.8),
+        speed: 8 + Math.random() * 12, // 29…72 km/h oncoming
+        lateral: -1.35 - Math.random() * 0.9, // opposite lane band
+        len: 4 + Math.random() * 2.2,
+        wid: 1.8 + Math.random() * 0.5,
+        color: TRAFFIC_COLORS[Math.floor(Math.random() * TRAFFIC_COLORS.length)],
+      });
+    };
+
     const resize = () => {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       W = wrap.clientWidth;
@@ -39,17 +83,35 @@ export function RoadCanvas() {
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
 
+    let last = 0;
+    let seeded = false;
+
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw);
       if (W === 0 || H === 0) return;
+      const dt = last ? Math.min(0.05, (now - last) / 1000) : 0.016;
+      last = now;
+
       const eng = simulationEngine;
       const pxm = Math.max(7, Math.min(W / 78, H / 17));
-      const camX = eng.kin.position - W * 0.3 / pxm; // vehicle sits 30% from left
+      const viewM = W / pxm;
+      const camX = eng.kin.position - viewM * 0.3; // vehicle sits 30% from left
       const cy = H * 0.4;
       const w2s = (wx: number, wy: number): [number, number] => [
         (wx - camX) * pxm,
         cy + wy * pxm,
       ];
+
+      // seed + recycle oncoming traffic
+      if (!seeded) {
+        seeded = true;
+        for (let i = 0; i < 5; i++) spawnAhead(camX, viewM, 8 + i * (viewM / 5));
+      }
+      for (const t of traffic) t.pos -= t.speed * dt;
+      for (let i = 0; i < traffic.length; i++) {
+        if (traffic[i].pos < camX - 18) traffic.splice(i, 1);
+      }
+      while (traffic.length < 5) spawnAhead(camX, viewM, 12);
 
       const wobble = eng.snapshot().accidentWobble;
       ctx.save();
@@ -67,10 +129,50 @@ export function RoadCanvas() {
       ctx.fillStyle = terrainGrad;
       ctx.fillRect(-40, -40, W + 80, H + 80);
 
-      // roadside posts (parallax)
-      ctx.fillStyle = "rgba(255,255,255,0.10)";
+      // roadside trees (upper side, stable per index)
+      const treeSpacing = 21;
+      const treeStart = Math.floor((camX - 6) / treeSpacing) * treeSpacing;
+      for (let x = treeStart; x < camX + viewM + 10; x += treeSpacing) {
+        const r = 0.9 + hash01(x / treeSpacing) * 0.8;
+        const [sx, sy] = w2s(x + hash01(x * 0.7) * 6, ROAD_GEOMETRY.roadTop - 2.6);
+        ctx.fillStyle = "rgba(38,66,45,0.85)";
+        ctx.beginPath();
+        ctx.arc(sx, sy, r * pxm, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(52,88,58,0.9)";
+        ctx.beginPath();
+        ctx.arc(sx - r * pxm * 0.25, sy - r * pxm * 0.25, r * pxm * 0.55, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // street lamps (upper verge): pole + warm head + light pool
+      const lampSpacing = 34;
+      const lampStart = Math.floor((camX - 6) / lampSpacing) * lampSpacing;
+      for (let x = lampStart; x < camX + viewM + 10; x += lampSpacing) {
+        const [sx, syBase] = w2s(x, ROAD_GEOMETRY.roadTop - 0.7);
+        const poleTop = syBase - 2.6 * pxm;
+        ctx.strokeStyle = "rgba(148,163,184,0.55)";
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(sx, syBase);
+        ctx.lineTo(sx, poleTop);
+        ctx.stroke();
+        // light pool on the road edge
+        const pool = ctx.createRadialGradient(sx, syBase + 6, 2, sx, syBase + 6, pxm * 3.4);
+        pool.addColorStop(0, "rgba(253,224,71,0.10)");
+        pool.addColorStop(1, "rgba(253,224,71,0)");
+        ctx.fillStyle = pool;
+        ctx.fillRect(sx - pxm * 3.4, syBase - pxm * 2.4, pxm * 6.8, pxm * 6);
+        ctx.fillStyle = "rgba(253,230,138,0.95)";
+        ctx.beginPath();
+        ctx.arc(sx, poleTop, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // roadside reflector posts (lower verge)
+      ctx.fillStyle = "rgba(255,255,255,0.16)";
       const postStart = Math.floor(camX / 14) * 14;
-      for (let x = postStart; x < camX + W / pxm + 14; x += 14) {
+      for (let x = postStart; x < camX + viewM + 14; x += 14) {
         const [sx, syTop] = w2s(x, ROAD_GEOMETRY.roadBottom + 5.2);
         const [, syBot] = w2s(x, ROAD_GEOMETRY.roadBottom + 4.6);
         ctx.fillRect(sx - 1.2, syTop, 2.4, syBot - syTop);
@@ -88,7 +190,6 @@ export function RoadCanvas() {
       ctx.clip();
       ctx.strokeStyle = "rgba(255,255,255,0.05)";
       ctx.lineWidth = 2;
-      const hatch = Math.floor(camX * pxm / 26) * 26;
       for (let i = -30; i < W / 26 + 30; i++) {
         const hx = i * 26 - (camX * pxm) % 26;
         ctx.beginPath();
@@ -96,12 +197,11 @@ export function RoadCanvas() {
         ctx.lineTo(hx + (shB - shT), shT);
         ctx.stroke();
       }
-      void hatch;
       ctx.restore();
 
       // ---------------- asphalt ----------------
-      const [rdT] = [cy + ROAD_GEOMETRY.roadTop * pxm];
-      const [rdB] = [cy + ROAD_GEOMETRY.roadBottom * pxm];
+      const rdT = cy + ROAD_GEOMETRY.roadTop * pxm;
+      const rdB = cy + ROAD_GEOMETRY.roadBottom * pxm;
       const asphalt = ctx.createLinearGradient(0, rdT, 0, rdB);
       asphalt.addColorStop(0, "#1c2226");
       asphalt.addColorStop(0.5, "#232a2f");
@@ -120,16 +220,65 @@ export function RoadCanvas() {
         ctx.stroke();
       }
 
-      // center dashed line
+      // center dashed line — dash phase tied to world position so it streams past
       ctx.strokeStyle = "rgba(250, 204, 21, 0.55)";
       ctx.lineWidth = 2.4;
       ctx.setLineDash([pxm * 2.2, pxm * 2.2]);
+      ctx.lineDashOffset = (camX * pxm) % (pxm * 4.4);
       const [, cym] = w2s(camX, 0);
       ctx.beginPath();
       ctx.moveTo(0, cym);
       ctx.lineTo(W, cym);
       ctx.stroke();
       ctx.setLineDash([]);
+      ctx.lineDashOffset = 0;
+
+      // ---------------- oncoming traffic (opposite lane) ----------------
+      for (const t of traffic) {
+        const [tx, ty] = w2s(t.pos, t.lateral);
+        if (tx < -80 || tx > W + 80) continue;
+        const TL = t.len * pxm;
+        const TW = t.wid * pxm;
+        ctx.save();
+        ctx.translate(tx, ty);
+        ctx.fillStyle = t.color;
+        roundRect(ctx, -TL / 2, -TW / 2, TL, TW, TW * 0.38);
+        ctx.fill();
+        ctx.fillStyle = "rgba(15,23,42,0.8)";
+        roundRect(ctx, -TL * 0.18, -TW / 2 + 2, TL * 0.32, TW - 4, 2.5);
+        ctx.fill();
+        // oncoming headlights (facing -x) + glow
+        const glow = ctx.createRadialGradient(-TL / 2 - 3, 0, 1, -TL / 2 - 3, 0, pxm * 2.4);
+        glow.addColorStop(0, "rgba(255,247,214,0.30)");
+        glow.addColorStop(1, "rgba(255,247,214,0)");
+        ctx.fillStyle = glow;
+        ctx.fillRect(-TL / 2 - pxm * 2.4, -TW, pxm * 2.8, TW * 2);
+        ctx.fillStyle = "rgba(255,250,220,0.95)";
+        ctx.beginPath();
+        ctx.arc(-TL / 2 + 1.5, -TW / 3, 1.8, 0, Math.PI * 2);
+        ctx.arc(-TL / 2 + 1.5, TW / 3, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // ---------------- speed streaks (highway motion cue) ----------------
+      const kmhNow = eng.kin.speed * 3.6;
+      if (kmhNow > 28) {
+        const alpha = Math.min(0.22, (kmhNow - 28) / 320);
+        ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+        ctx.lineWidth = 1.5;
+        const gap = 88;
+        const len = Math.min(170, kmhNow * 1.15);
+        const off = (camX * pxm * 1.45) % gap;
+        for (const sy of [rdT - 16, rdB + 24, rdT - 42, rdB + 52]) {
+          for (let sx = -off - len; sx < W + len; sx += gap) {
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(sx - len, sy);
+            ctx.stroke();
+          }
+        }
+      }
 
       // ---------------- safe stop zone ----------------
       const zone = eng.autonomy.stopZone;
@@ -167,8 +316,8 @@ export function RoadCanvas() {
         });
         ctx.stroke();
         ctx.setLineDash([]);
-        const last = eng.autonomy.path[eng.autonomy.path.length - 1];
-        const [tx, ty] = w2s(last.x, last.y);
+        const lastP = eng.autonomy.path[eng.autonomy.path.length - 1];
+        const [tx, ty] = w2s(lastP.x, lastP.y);
         ctx.fillStyle = "rgba(249,115,22,0.9)";
         ctx.beginPath();
         ctx.arc(tx, ty, 4, 0, Math.PI * 2);
@@ -185,6 +334,7 @@ export function RoadCanvas() {
       const Wd = Math.max(6, spec.width * pxm);
       const blinkHazard = eng.hazardsOn && (now / 450) % 1 < 0.55;
       const heading = (eng.kin.headingDeg * Math.PI) / 180;
+      const braking = eng.engineOn && (eng.kin.brake > 0.05 || eng.kin.accel < -0.45);
 
       ctx.save();
       ctx.translate(vx, vy);
@@ -244,6 +394,20 @@ export function RoadCanvas() {
         ctx.stroke();
       }
 
+      // brake lights
+      if (braking) {
+        for (const by of [-Wd / 3, Wd / 3]) {
+          ctx.fillStyle = "rgba(248,113,113,0.35)";
+          ctx.beginPath();
+          ctx.arc(-L / 2 + 1, by, 4.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#ef4444";
+          ctx.beginPath();
+          ctx.arc(-L / 2 + 1, by, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
       // hazard lights
       if (blinkHazard) {
         ctx.fillStyle = "#fbbf24";
@@ -272,22 +436,41 @@ export function RoadCanvas() {
 
       // ---------------- HUD ----------------
       ctx.font = "600 11px ui-monospace, monospace";
-      const kmh = eng.kin.speed * 3.6;
       ctx.fillStyle = "rgba(255,255,255,0.75)";
-      ctx.fillText(`${kmh.toFixed(0)} km/h`, 14, 22);
+      ctx.fillText(`${kmhNow.toFixed(0)} km/h`, 14, 22);
       ctx.fillStyle = "rgba(255,255,255,0.4)";
       ctx.fillText(`ODO ${eng.kin.odometer.toFixed(0)} m`, 14, 38);
+
+      // autopilot / high speed chip
+      if (eng.autopilot && !eng.controlLocked) {
+        const cruiseKmh = eng.highSpeed
+          ? Math.round(spec.maxSpeed * 3.6)
+          : eng.settings.cruiseSpeed[eng.vehicleType];
+        const pulse = (now / 700) % 1 < 0.7;
+        const label = eng.highSpeed
+          ? `AUTOPILOT · HIGH SPEED ${cruiseKmh} km/h`
+          : `AUTOPILOT · CRUISE ${cruiseKmh} km/h`;
+        ctx.font = "700 12px ui-monospace, monospace";
+        ctx.fillStyle = eng.highSpeed
+          ? pulse
+            ? "rgba(252,211,77,0.95)"
+            : "rgba(252,211,77,0.55)"
+          : pulse
+            ? "rgba(34,211,238,0.95)"
+            : "rgba(34,211,238,0.55)";
+        ctx.fillText(label, W / 2 - label.length * 3.4, 24);
+      }
 
       if (eng.mode === "AUTONOMOUS") {
         ctx.fillStyle = "rgba(249,115,22,0.95)";
         ctx.font = "700 15px ui-monospace, monospace";
         const pulse = (now / 700) % 1 < 0.65;
-        if (pulse) ctx.fillText("AUTONOMOUS SAFETY MODE", W / 2 - 110, 30);
+        if (pulse) ctx.fillText("AUTONOMOUS SAFETY MODE", W / 2 - 110, 44);
         if (zone.active) {
           const dist = Math.max(0, zone.position - eng.kin.position);
           ctx.font = "600 11px ui-monospace, monospace";
           ctx.fillStyle = "rgba(251,191,36,0.9)";
-          ctx.fillText(`STOP ZONE: ${dist.toFixed(0)} m`, W / 2 - 46, 48);
+          ctx.fillText(`STOP ZONE: ${dist.toFixed(0)} m`, W / 2 - 46, 60);
         }
       } else if (eng.controlLocked && eng.mode !== "IDLE") {
         ctx.fillStyle = "rgba(248,113,113,0.85)";

@@ -6,7 +6,6 @@ import { useStore } from "@/lib/store";
 import { AnimatePresence } from "framer-motion";
 import { CameraPanel } from "./CameraPanel";
 import { RoadCanvas } from "./RoadCanvas";
-import { DriveControls } from "./DriveControls";
 import { TelemetryPanel } from "./TelemetryPanel";
 import { SafetyPanel } from "./SafetyPanel";
 import { ControlPanel } from "./ControlPanel";
@@ -52,7 +51,6 @@ export function SimulationView() {
             <AlertBanner key={bannerKey(snap)} />
           </AnimatePresence>
           <RoadCanvas />
-          <DriveControls />
           <ControlPanel />
         </div>
 
