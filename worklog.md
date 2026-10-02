@@ -94,3 +94,24 @@ Stage Summary:
 - Browser E2E: Simulation view → START → AUTOPILOT — road renders only the player vehicle cruising (AUTOPILOT · CRUISE chip, ODO accumulating, 0.0 m offset), zero page errors
 - Screenshot: verify-no-traffic.png (clean single-vehicle road with scenery)
 - Rationale noted for user: traffic was a motion cue only; removed per preference — scrolling dashes/scenery now carry the motion signal
+
+---
+Task ID: 6
+Agent: main (Super Z)
+Task: User request — "give me project details in detail" → produce detailed project documentation as a PDF deliverable (AskUserQuestion round returned the same request; recommended defaults applied: detailed PDF, tech-fest orientation, dark-tech style, embedded screenshots).
+
+Work Log:
+- Loaded pdf skill; read SKILL.md + briefs/report.md (full 1704 lines) + all referenced typesetting files (cover, overflow, palette, pagination, typography, fill-engine, charts, geometry, cover-backgrounds, fonts)
+- Selected cover Template 07 "Crystal Blue" (dark navy #0a1628 + luminous #4da8da frame) — matches requested dark-tech style; fixed body palette per template (page #f5f8fc, header #1a4a7a, accent #2d7ab3, text #142840)
+- Built architecture diagram (scripts/doc/diagram.html): 3-layer sense/decide/show, 6 nodes, merge-pattern arrows, low-sat blue family, Playwright screenshot @2x → PNG (2000x1200); font sizes chosen for >=8pt effective at 451pt embed width
+- Cover: scripts/doc/cover.html per Template 07 spec (frame inset 60/80px, kicker/hero/summary/org/date anchored, content left 104px for 1U line-gap); poster_validate.py check-html PASS + cover_validate.js PASS; rendered via html2poster.js --width 794px
+- Body: scripts/doc/generate_report.py (ReportLab, SimpleDocTemplate, no TOC per <10 pages rule); 8 numbered chapters (Exec Overview, Features, Vehicle Matrix, Architecture, Drive Modes, Demo Scenarios, Tech Stack, Running & Verification); 6 tables (all cells Paragraph(), proportional colWidths, repeatRows=1, HEADER_FILL headers, TABLE_STRIPE stripes), stat callout band, 2 code blocks, 2 screenshots embedded with PIL aspect fit + captions in KeepTogether; page bg #f5f8fc + header/footer via onPage; CondPageBreak(25%) before H1s
+- Font issues fixed: chinese/NotoSansSC-Regular.ttf absent (variable font only, ReportLab can't parse) → dropped; kept NotoSerifSC + FreeSerif family + DejaVuSansMono; install_font_fallback() called
+- Iterations: (1) cover page size 595.9x842.9 vs A4 → normalize threshold 2pt→0.1pt in merge.py; (2) Table 1 header mid-word wrap ("Top spee d") → measured stringWidth, ratios [0.11,0.13,0.10,0.28,0.38]; (3) TRUCK cell wrap → col 1 ratio 0.11; (4) last-page fill ~25% → CondPageBreak(260) before verification block → ~55%
+- Preflight: code.sanitize before every run; meta.brand; font.check (0 issues); pages.clean (no blank pages); pdf_qa.py --skip-cover → PASS
+
+Stage Summary:
+- Deliverable: /home/z/my-project/download/SmartDrive-AI-Project-Documentation.pdf (10 pages, 664 KB, cover + 9 body pages, vector, metadata branded)
+- Cover HTML source delivered: /home/z/my-project/download/SmartDrive-AI-Project-Documentation-cover.html
+- Intermediate artifacts: scripts/doc/{diagram.html,diagram.png,cover.pdf,body.pdf,shot.js,generate_report.py,merge.py}
+- Screenshots embedded from Task 4/5 verification shots (road scene, drive-mode buttons)
