@@ -61,7 +61,7 @@ export class SimulatedHelmetDetector implements HelmetDetector {
   }
 
   detect(): HelmetStateValue {
-    return worn ? "HELMET_DETECTED" : "HELMET_NOT_DETECTED";
+    return this.worn ? "HELMET_DETECTED" : "HELMET_NOT_DETECTED";
   }
 }
 

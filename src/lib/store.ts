@@ -292,7 +292,7 @@ export const useStore = create<StoreState>((set, get) => ({
     const elapsed = now - demo.stepStartedAt;
     let advance = false;
     try {
-      advance = step.advance ? step.advance() : false;
+      advance = step.advance ? step.advance(demoApi) : false;
     } catch {
       advance = false;
     }

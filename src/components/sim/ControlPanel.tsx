@@ -156,7 +156,7 @@ export function ControlPanel() {
         <div className="mt-2.5 text-[10px] text-white/35 flex items-center gap-1.5">
           <Keyboard className="h-3 w-3" />
           Manual driving: hold GAS pedal or W/↑ throttle · S/↓ brake · A/← D/→
-          steer · SPACE emergency stop
+          steer · P autopilot · SPACE emergency stop
         </div>
       )}
     </div>

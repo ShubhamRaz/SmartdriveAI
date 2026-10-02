@@ -12,12 +12,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { simulationEngine } from "@/lib/simulation/engine";
-import { ChevronLeft, ChevronRight, Keyboard, Lock, Play } from "lucide-react";
+import { Bot, ChevronLeft, ChevronRight, Keyboard, Lock, Play } from "lucide-react";
 
 type Ctrl = "gas" | "brake" | "left" | "right";
 
 export function DriveControls() {
   const snap = useStore((s) => s.snap);
+  const demoActive = useStore((s) => s.demo.active);
+  const cruise = useStore((s) => s.settings.cruiseSpeed[s.snap.vehicleType]);
   const [held, setHeld] = useState<Set<Ctrl>>(() => new Set());
 
   /** logic mirror of `held` — read only inside handlers, never during render */
@@ -29,6 +31,7 @@ export function DriveControls() {
     (snap.mode === "READY" || snap.mode === "MANUAL" || snap.mode === "WARNING");
   const engineOff = snap.mode === "IDLE" || snap.mode === "SAFETY_CHECK";
   const atStandstill = snap.speedKmh < 1;
+  const apAvailable = manual && !demoActive;
 
   const commit = useCallback((next: Set<Ctrl>) => {
     heldRef.current = next;
@@ -111,8 +114,26 @@ export function DriveControls() {
         </span>
       </div>
 
+      {/* autopilot toggle */}
+      <button
+        onClick={() => simulationEngine.toggleAutopilot()}
+        disabled={!apAvailable}
+        aria-pressed={snap.autopilot}
+        className={`mt-3 flex w-full select-none items-center justify-center gap-2 rounded-xl border h-11 text-xs font-bold tracking-widest transition-colors disabled:opacity-35 disabled:cursor-not-allowed ${
+          snap.autopilot
+            ? "bg-cyan-400/25 border-cyan-300/60 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.35)]"
+            : "bg-white/6 hover:bg-white/12 border-white/12 text-white/75"
+        }`}
+      >
+        <Bot className="h-4 w-4" />
+        {snap.autopilot ? "AUTOPILOT — ENGAGED" : "AUTOPILOT — OFF"}
+        <span className="text-[9px] font-semibold text-white/40">
+          {snap.autopilot ? "P to disengage" : "P or click to engage"}
+        </span>
+      </button>
+
       {/* steering + pedals */}
-      <div className="mt-3 flex items-stretch gap-2">
+      <div className="mt-2 flex items-stretch gap-2">
         <button
           aria-label="Steer left"
           disabled={!manual}
@@ -192,16 +213,23 @@ export function DriveControls() {
             drive again.
           </div>
         )}
-        {manual && atStandstill && (
+        {manual && snap.autopilot && (
+          <div className="flex items-center gap-1.5 text-[10px] font-bold text-cyan-300 tracking-wide">
+            <Bot className="h-3 w-3" />
+            AUTOPILOT DRIVING — cruise {cruise} km/h + lane keeping · brake, P or
+            STOP to disengage
+          </div>
+        )}
+        {manual && !snap.autopilot && atStandstill && (
           <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-300 tracking-wide sd-pulse">
             <Play className="h-3 w-3 fill-current" />
             HOLD GAS (or W / ↑) to accelerate — vehicle is at 0 km/h.
           </div>
         )}
-        {manual && !atStandstill && (
+        {manual && !snap.autopilot && !atStandstill && (
           <div className="text-[10px] text-white/35 tracking-wide">
-            Manual driving — hold pedals above or use W / S / A / D keys · SPACE
-            emergency stop
+            Manual driving — hold pedals above or use W / S / A / D keys · P
+            autopilot · SPACE emergency stop
           </div>
         )}
       </div>

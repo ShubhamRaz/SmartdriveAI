@@ -6,27 +6,9 @@
  * always times out after maxMs so the demo can never get stuck.
  */
 
-import type { DemoScenario, VehicleMode } from "../types";
+import type { DemoScenario, DemoApi, VehicleMode } from "../types";
 
-export interface DemoApi {
-  selectVehicle: (t: "BIKE" | "CAR" | "TRUCK") => void;
-  start: () => void;
-  stop: () => void;
-  reset: () => void;
-  enableAutoThrottle: (on: boolean) => void;
-  triggerAlcohol: (on: boolean) => void;
-  triggerDrowsiness: (on: boolean) => void;
-  simulateAccident: () => void;
-  setHelmet: (worn: boolean) => void;
-  mode: () => VehicleMode;
-  isMoving: () => boolean;
-  isStopped: () => boolean;
-  isReady: () => boolean;
-  isBlocked: () => boolean;
-  isAutonomous: () => boolean;
-  isSafeStopPhase: () => boolean;
-  speedKmh: () => number;
-}
+export type { DemoApi };
 
 const moving = (api: DemoApi) => api.isMoving();
 const ready = (api: DemoApi) => api.isReady();

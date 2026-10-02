@@ -150,7 +150,9 @@ export function SafetyPanel() {
                 ? "text-orange-300"
                 : snap.controlMode === "LOCKED"
                   ? "text-red-300"
-                  : "text-emerald-300"
+                  : snap.controlMode === "AUTOPILOT"
+                    ? "text-cyan-300"
+                    : "text-emerald-300"
             }`}
           >
             {snap.controlMode}

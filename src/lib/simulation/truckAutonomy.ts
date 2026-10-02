@@ -94,7 +94,7 @@ export function autonomyTick(
   dt: number,
 ): { cmd: AutonomyCommand; done: boolean; phaseChanged: AutonomyPhase | null } {
   state.phaseElapsed += dt;
-  const phaseChanged: AutonomyPhase | null = [];
+  const phaseChanged: AutonomyPhase[] = [];
 
   const cmd: AutonomyCommand = { throttle: 0, brake: 0, lateralTarget: null };
   let done = false;

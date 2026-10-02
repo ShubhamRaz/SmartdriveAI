@@ -5,7 +5,7 @@
  * inside the engine):
  *   W / ↑  accelerate     S / ↓  brake
  *   A / ←  steer left     D / →  steer right
- *   SPACE  emergency stop
+ *   SPACE  emergency stop   P  toggle autopilot
  *
  * Event-driven: input is only written to the engine when a key state actually
  * changes, so the on-screen pad channel is never stomped by an idle poll.
@@ -56,13 +56,18 @@ export function useKeyboard(active: boolean) {
 
     const onKeyDown = (e: KeyboardEvent) => {
       const k = normalize(e.key);
-      if (!CONTROL_KEYS.has(k)) return;
+      if (k !== "p" && !CONTROL_KEYS.has(k)) return;
       // don't hijack keys while typing in inputs
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
       e.preventDefault();
       if (k === " ") {
         simulationEngine.emergencyStop();
+        return;
+      }
+      if (k === "p") {
+        // P toggles autopilot; ignore auto-repeat so holding P doesn't flicker
+        if (!e.repeat) simulationEngine.toggleAutopilot();
         return;
       }
       if (!pressed.has(k)) {

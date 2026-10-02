@@ -42,3 +42,21 @@ Stage Summary:
 - Browser-verified E2E: START → pedals enable → mouse-hold GAS: 0→43 km/h in 3 s → release: 120→117 km/h decay (matches 0.5 m/s² drag) → BRAKE hold: 81→19 km/h → W key still drives → RESET clean
 - Screenshots: verify-pedal-braking.png (brake active), verify-standstill-hint.png (guidance hint)
 - Keyboard remains fully supported; touch/mouse now first-class; demo scenarios unaffected (pad ignored while demoAutoThrottle)
+
+---
+Task ID: 3
+Agent: main (Super Z)
+Task: Add AUTOPILOT mode (user request) — AI chauffeur with cruise control + lane keeping, plus repair all pre-existing tsc errors.
+
+Work Log:
+- engine.ts: added `autopilot` flag + toggleAutopilot() (gated on READY/MANUAL/WARNING, !controlLocked, not in demo); tickAutopilot() drives via stepPhysics with lateralTarget=0 (lane keeping) and proportional cruise throttle to settings.cruiseSpeed[vehicle]; brake input >0.2 disengages; disengageAutopilot() wired into beginControlledStop / enterEmergency / beginAutonomousStop so safety interventions always outrank AP; AP cleared in start()/reset(); snapshot exposes autopilot + stoppedByIntervention and controlMode derives "AUTOPILOT"
+- types.ts: ControlMode union extended with "AUTOPILOT"; moved DemoApi into types.ts (was mismatched with DemoStep signatures); DemoStep.run/advance now typed (api: DemoApi) => void|boolean / boolean; scenarioEngine re-exports DemoApi; store demoTick passes demoApi to advance()
+- DriveControls.tsx: full-width AUTOPILOT toggle (cyan glow when engaged) above pedals, disabled outside manual control or during demos; status line "AUTOPILOT DRIVING — cruise X km/h + lane keeping · brake, P or STOP to disengage"
+- useKeyboard.ts: P toggles autopilot (e.repeat guarded); SafetyPanel CONTROL chip renders AUTOPILOT in cyan; ControlPanel + README docs updated
+- Fixed ALL pre-existing tsc errors so typecheck is now a usable gate: truckAutonomy phaseChanged array typing, visionTypes missing this., engine accident-message string*number math, dead STOPPED comparison, ControlPanel's missing snapshot field, examples/+skills/ excluded from tsconfig
+- ESLint clean, tsc --noEmit fully clean
+
+Stage Summary:
+- Browser E2E verified: click engage → CAR 0→79 km/h holding cruise target 80 with 0.0 m roadside offset over 9 s; brake pedal disengages (event "Autopilot disengaged — driver brake input"); P key toggles both ways; RESET clears AP; CONTROL chip + [AI] timeline events correct
+- Screenshot: verify-autopilot.png (panel with AP toggle, dimmed while engine off)
+- Demo scenarios unaffected: AP toggle disabled while demo runner active, demoAutoThrottle path untouched

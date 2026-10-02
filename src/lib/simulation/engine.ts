@@ -49,6 +49,8 @@ export interface EngineSnapshot {
   decision: SafetyDecision;
   engineOn: boolean;
   moving: boolean;
+  autopilot: boolean;
+  stoppedByIntervention: boolean;
   speedKmh: number;
   accelMs2: number;
   steer: number;
@@ -117,6 +119,7 @@ export class SimulationEngine {
   powerLimit = 1;
   hazardsOn = false;
   demoAutoThrottle = false;
+  autopilot = false;
 
   kin = {
     speed: 0,
@@ -229,6 +232,7 @@ export class SimulationEngine {
     this.safetyCheckTimer = 0;
     this.helmetCheckAnnounced = false;
     this.startBlockedReason = null;
+    this.autopilot = false;
     this.pad = { throttle: 0, brake: 0, steer: 0 };
     this.emit("INFO", "SAFETY ENGINE", "Pre-start safety checks running…");
     playCue("START");
@@ -238,6 +242,38 @@ export class SimulationEngine {
     if (this.mode === "IDLE" || this.mode === "SAFETY_CHECK") return;
     this.manualStopRequested = true;
     this.emit("INFO", "VEHICLE ENGINE", "Manual stop requested");
+  }
+
+  /**
+   * Toggle autopilot (AI chauffeur): cruises at the vehicle's configured
+   * cruise speed and keeps the lane. Any safety intervention, brake input or
+   * manual stop disengages it. Keyboard: P.
+   */
+  toggleAutopilot() {
+    if (this.controlLocked || this.demoAutoThrottle) return;
+    if (
+      this.mode !== "READY" &&
+      this.mode !== "MANUAL" &&
+      this.mode !== "WARNING"
+    )
+      return;
+    this.autopilot = !this.autopilot;
+    if (this.autopilot) {
+      this.emit(
+        "AI",
+        "VEHICLE ENGINE",
+        `AUTOPILOT engaged — cruising at ${this.settings.cruiseSpeed[this.vehicleType]} km/h with lane keeping`,
+      );
+      playCue("TAKEOVER");
+    } else {
+      this.emit("INFO", "VEHICLE ENGINE", "Autopilot disengaged — manual control restored");
+    }
+  }
+
+  private disengageAutopilot(reason: string) {
+    if (!this.autopilot) return;
+    this.autopilot = false;
+    this.emit("INFO", "SAFETY ENGINE", `Autopilot disengaged — ${reason}`);
   }
 
   emergencyStop() {
@@ -263,7 +299,7 @@ export class SimulationEngine {
     this.emit(
       "CRITICAL",
       "SIMULATION",
-      `Accident simulated — impact at ${this.kin.speed.toFixed(1) * 3.6 > 0 ? (this.kin.speed * 3.6).toFixed(0) : "0"} km/h`,
+      `Accident simulated — impact at ${(this.kin.speed * 3.6).toFixed(0)} km/h`,
     );
     playCue("ACCIDENT");
   }
@@ -353,6 +389,7 @@ export class SimulationEngine {
     this.bikeMotorLimited = false;
     this.powerLimit = 1;
     this.hazardsOn = false;
+    this.autopilot = false;
     this.kin = {
       speed: 0,
       position: 0,
@@ -418,7 +455,11 @@ export class SimulationEngine {
       case "READY":
       case "MANUAL":
       case "WARNING":
-        this.tickDriving(dt, s);
+        if (this.autopilot) {
+          this.tickAutopilot(dt);
+        } else {
+          this.tickDriving(dt, s);
+        }
         break;
       case "AUTONOMOUS":
         this.tickAutonomous(dt);
@@ -548,6 +589,46 @@ export class SimulationEngine {
     }
   }
 
+  /** autopilot chauffeur: cruise control + lane keeping toward lane center */
+  private tickAutopilot(dt: number) {
+    // driver brake input disengages autopilot (same convention as real ADAS)
+    const brakeInput = Math.max(this.kin.brake, this.pad.brake);
+    if (brakeInput > 0.2) {
+      this.disengageAutopilot("driver brake input");
+      this.tickDriving(dt, this.settings);
+      return;
+    }
+
+    const cruise = this.settings.cruiseSpeed[this.vehicleType] / 3.6;
+    const err = cruise - this.kin.speed;
+    const throttle = err > 0.3 ? Math.min(1, 0.25 + err * 0.6) : err < -0.6 ? 0 : 0.08;
+    const res = stepPhysics(
+      this.kin.speed,
+      this.kin.position,
+      this.kin.lateral,
+      this.kin.odometer,
+      VEHICLE_SPECS[this.vehicleType],
+      { throttle, brake: 0, steer: 0, powerLimit: this.powerLimit },
+      dt,
+      0, // lane keeping: steer back to lane center
+    );
+    this.applyPhysics(res);
+
+    // mode semantics
+    this.mode =
+      this.decision.severity === "WARNING"
+        ? "WARNING"
+        : this.kin.speed > 0.5
+          ? "MANUAL"
+          : "READY";
+
+    if (this.manualStopRequested) {
+      this.manualStopRequested = false;
+      this.disengageAutopilot("operator stop request");
+      this.beginControlledStop("MANUAL_STOP");
+    }
+  }
+
   private tickAutonomous(dt: number) {
     const { cmd, done, phaseChanged } = autonomyTick(
       this.autonomy,
@@ -633,6 +714,7 @@ export class SimulationEngine {
     this.mode = "STOPPING";
     this.hazardsOn = true;
     this.controlLocked = true;
+    this.disengageAutopilot("safety intervention");
     if (!this.sessionReason) {
       this.sessionReason =
         this.decision.trigger === null
@@ -646,6 +728,7 @@ export class SimulationEngine {
     this.mode = "EMERGENCY";
     this.controlLocked = true;
     this.hazardsOn = true;
+    this.disengageAutopilot("emergency stop");
     this.safetyStatus = "EMERGENCY";
     this.sessionReason = reason;
     this.decision = {
@@ -906,7 +989,7 @@ export class SimulationEngine {
           }
           break;
         default:
-          this.safetyStatus = this.mode === "STOPPED" ? this.safetyStatus : "SAFE";
+          this.safetyStatus = "SAFE";
       }
     } else if (
       this.mode === "IDLE" &&
@@ -926,6 +1009,7 @@ export class SimulationEngine {
     this.mode = "AUTONOMOUS";
     this.controlLocked = true;
     this.hazardsOn = true;
+    this.disengageAutopilot("autonomous safety takeover");
     this.firstCriticalAt ??= Date.now();
     if (!this.takeoverPlanned) {
       this.takeoverPlanned = true;
@@ -1060,10 +1144,14 @@ export class SimulationEngine {
           ? "AUTONOMOUS"
           : this.controlLocked
             ? "LOCKED"
-            : "MANUAL",
+            : this.autopilot
+              ? "AUTOPILOT"
+              : "MANUAL",
       decision: this.decision,
       engineOn: this.engineOn,
       moving: this.kin.speed > 0.5,
+      autopilot: this.autopilot,
+      stoppedByIntervention: this.stoppedByIntervention,
       speedKmh: this.kin.speed * 3.6,
       accelMs2: this.kin.accel,
       steer: Math.max(-1, Math.min(1, this.kin.steering + this.pad.steer)),

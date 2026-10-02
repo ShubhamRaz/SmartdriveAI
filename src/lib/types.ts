@@ -19,7 +19,29 @@ export type VehicleMode =
 
 export type SafetyStatus = "SAFE" | "WARNING" | "CRITICAL" | "EMERGENCY";
 
-export type ControlMode = "MANUAL" | "AUTONOMOUS" | "LOCKED";
+export type ControlMode = "MANUAL" | "AUTOPILOT" | "AUTONOMOUS" | "LOCKED";
+
+/** Scripted demo-runner API handed to DemoStep.run — defined here so
+ * DemoStep.run can reference it without a circular value import. */
+export interface DemoApi {
+  selectVehicle: (t: VehicleType) => void;
+  start: () => void;
+  stop: () => void;
+  reset: () => void;
+  enableAutoThrottle: (on: boolean) => void;
+  triggerAlcohol: (on: boolean) => void;
+  triggerDrowsiness: (on: boolean) => void;
+  simulateAccident: () => void;
+  setHelmet: (worn: boolean) => void;
+  mode: () => VehicleMode;
+  isMoving: () => boolean;
+  isStopped: () => boolean;
+  isReady: () => boolean;
+  isBlocked: () => boolean;
+  isAutonomous: () => boolean;
+  isSafeStopPhase: () => boolean;
+  speedKmh: () => number;
+}
 
 export type RecommendedAction =
   | "NONE"
@@ -226,8 +248,8 @@ export interface DemoStep {
   label: string;
   detail: string;
   maxMs: number;
-  run?: () => void;
-  advance?: () => boolean; // condition to advance early
+  run?: (api: DemoApi) => void | boolean;
+  advance?: (api: DemoApi) => boolean; // condition to advance early
 }
 
 export interface DemoScenario {
