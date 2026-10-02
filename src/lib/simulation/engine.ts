@@ -130,6 +130,9 @@ export class SimulationEngine {
     accel: 0,
   };
 
+  /** on-screen drive controls (touch/mouse pedals) — merged with keyboard */
+  pad = { throttle: 0, brake: 0, steer: 0 };
+
   helmet: HelmetState = { state: "HELMET_NOT_DETECTED", source: "SIMULATION" };
   alcohol: AlcoholState = {
     level: 0,
@@ -226,6 +229,7 @@ export class SimulationEngine {
     this.safetyCheckTimer = 0;
     this.helmetCheckAnnounced = false;
     this.startBlockedReason = null;
+    this.pad = { throttle: 0, brake: 0, steer: 0 };
     this.emit("INFO", "SAFETY ENGINE", "Pre-start safety checks running…");
     playCue("START");
   }
@@ -360,6 +364,7 @@ export class SimulationEngine {
       headingDeg: 0,
       accel: 0,
     };
+    this.pad = { throttle: 0, brake: 0, steer: 0 };
     this.helmet = { state: "HELMET_NOT_DETECTED", source: "SIMULATION" };
     this.alcohol = {
       level: 0,
@@ -503,14 +508,19 @@ export class SimulationEngine {
   }
 
   private tickDriving(dt: number, s: AppSettings) {
-    // manual / warning driving: gather inputs
+    // manual / warning driving: gather inputs (keyboard channel + on-screen pad)
     let throttle = this.kin.throttle;
-    const brake = this.kin.brake;
-    const steer = this.kin.steering;
+    let brake = this.kin.brake;
+    let steer = this.kin.steering;
 
     if (this.demoAutoThrottle) {
       const cruise = (s.cruiseSpeed[this.vehicleType] / 3.6) * 0.92;
       throttle = this.kin.speed < cruise ? 1 : 0.05;
+    } else {
+      // merge on-screen pedal input (strongest input wins)
+      throttle = Math.max(throttle, this.pad.throttle);
+      brake = Math.max(brake, this.pad.brake);
+      steer = Math.max(-1, Math.min(1, steer + this.pad.steer));
     }
 
     const res = stepPhysics(
@@ -1056,9 +1066,9 @@ export class SimulationEngine {
       moving: this.kin.speed > 0.5,
       speedKmh: this.kin.speed * 3.6,
       accelMs2: this.kin.accel,
-      steer: this.kin.steering,
-      throttle: this.kin.throttle,
-      brake: this.kin.brake,
+      steer: Math.max(-1, Math.min(1, this.kin.steering + this.pad.steer)),
+      throttle: Math.max(this.kin.throttle, this.pad.throttle),
+      brake: Math.max(this.kin.brake, this.pad.brake),
       odometerM: this.kin.odometer,
       lateral: this.kin.lateral,
       headingDeg: this.kin.headingDeg,
@@ -1118,6 +1128,17 @@ export class SimulationEngine {
   setBrake(v: number) {
     if (this.controlLocked) return;
     this.kin.brake = v;
+  }
+
+  /**
+   * On-screen drive controls (touch / mouse pedals). Deliberately ungated so a
+   * released pedal can always zero itself out; the values are only consumed by
+   * tickDriving while manual driving modes are active.
+   */
+  setPadInput(throttle: number, brake: number, steer: number) {
+    this.pad.throttle = Math.max(0, Math.min(1, throttle));
+    this.pad.brake = Math.max(0, Math.min(1, brake));
+    this.pad.steer = Math.max(-1, Math.min(1, steer));
   }
 }
 

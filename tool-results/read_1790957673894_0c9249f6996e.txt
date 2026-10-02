@@ -1,0 +1,1132 @@
+     1→     1→/**
+     2→     2→ * SMARTDRIVE AI — central simulation engine (mutable singleton, game-loop owned).
+     3→     3→ *
+     4→     4→ * The engine owns all simulation state. React subscribes to a 10 Hz snapshot
+     5→     5→ * mirror (Zustand) while the road canvas reads the engine directly every
+     6→     6→ * animation frame for smooth 60 fps rendering.
+     7→     7→ *
+     8→     8→ * SAFETY: this is an educational simulation. It never controls a real vehicle.
+     9→     9→ */
+    10→    10→
+    11→    11→import type {
+    12→    12→  AlcoholState,
+    13→    13→  AppSettings,
+    14→    14→  AutonomyPhase,
+    15→    15→  ControlMode,
+    16→    16→  DetectionSource,
+    17→    17→  DrowsinessState,
+    18→    18→  DriverState,
+    19→    19→  HelmetState,
+    20→    20→  SafetyDecision,
+    21→    21→  SafetyStatus,
+    22→    22→  SessionRecord,
+    23→    23→  TimelineEvent,
+    24→    24→  VehicleMode,
+    25→    25→  VehicleType,
+    26→    26→  VisionFrameState,
+    27→    27→  AccidentState,
+    28→    28→} from "../types";
+    29→    29→import { makeEventId, makeSessionId } from "../timestamps";
+    30→    30→import { playCue, type AudioCue } from "../audio";
+    31→    31→import {
+    32→    32→  VEHICLE_SPECS,
+    33→    33→  stepPhysics,
+    34→    34→} from "./vehiclePhysics";
+    35→    35→import { VEHICLE_RULES } from "./vehicleRules";
+    36→    36→import { evaluateSafety } from "./safetyEngine";
+    37→    37→import {
+    38→    38→  autonomyTick,
+    39→    39→  createAutonomyState,
+    40→    40→  planTakeover,
+    41→    41→  type AutonomyState,
+    42→    42→} from "./truckAutonomy";
+    43→    43→
+    44→    44→export interface EngineSnapshot {
+    45→    45→  vehicleType: VehicleType;
+    46→    46→  mode: VehicleMode;
+    47→    47→  safetyStatus: SafetyStatus;
+    48→    48→  controlMode: ControlMode;
+    49→    49→  decision: SafetyDecision;
+    50→    50→  engineOn: boolean;
+    51→    51→  moving: boolean;
+    52→    52→  speedKmh: number;
+    53→    53→  accelMs2: number;
+    54→    54→  steer: number;
+    55→    55→  throttle: number;
+    56→    56→  brake: number;
+    57→    57→  odometerM: number;
+    58→    58→  lateral: number;
+    59→    59→  headingDeg: number;
+    60→    60→  hazardsOn: boolean;
+    61→    61→  controlLocked: boolean;
+    62→    62→  startBlockedReason: string | null;
+    63→    63→  powerLimited: boolean;
+    64→    64→  autonomyPhase: AutonomyPhase;
+    65→    65→  stopZoneActive: boolean;
+    66→    66→  stopZonePos: number;
+    67→    67→  helmet: HelmetState;
+    68→    68→  alcohol: AlcoholState;
+    69→    69→  drowsiness: DrowsinessState;
+    70→    70→  driver: DriverState;
+    71→    71→  accident: AccidentState;
+    72→    72→  vision: {
+    73→    73→    active: boolean;
+    74→    74→    modelStatus: string;
+    75→    75→    faceDetected: boolean;
+    76→    76→    eyeClosed: boolean;
+    77→    77→    blinkScore: number;
+    78→    78→    headYaw: number;
+    79→    79→    fps: number;
+    80→    80→  };
+    81→    81→  sessionStartedAt: number | null;
+    82→    82→  lastAccel: number;
+    83→    83→  accidentWobble: number;
+    84→    84→  bikeMotorLimited: boolean;
+    85→    85→}
+    86→    86→
+    87→    87→type Listener = {
+    88→    88→  onEvent: (e: TimelineEvent) => void;
+    89→    89→  onAudio: (cue: AudioCue) => void;
+    90→    90→  onSessionEnd: (r: SessionRecord) => void;
+    91→    91→};
+    92→    92→
+    93→    93→const STOP_SPEED_EPS = 0.25;
+    94→    94→
+    95→    95→export class SimulationEngine {
+    96→    96→  /* ------------------------------- config ------------------------------- */
+    97→    97→  vehicleType: VehicleType = "TRUCK";
+    98→    98→  settings: AppSettings;
+    99→    99→
+   100→   100→  /* ------------------------------- state -------------------------------- */
+   101→   101→  mode: VehicleMode = "IDLE";
+   102→   102→  safetyStatus: SafetyStatus = "SAFE";
+   103→   103→  controlMode: ControlMode = "MANUAL";
+   104→   104→  decision: SafetyDecision = {
+   105→   105→    severity: "SAFE",
+   106→   106→    reason: "Standby",
+   107→   107→    recommendedAction: "NONE",
+   108→   108→    controlMode: "MANUAL",
+   109→   109→    evidence: [],
+   110→   110→    trigger: null,
+   111→   111→  };
+   112→   112→  engineOn = false;
+   113→   113→  startBlockedReason: string | null = null;
+   114→   114→  controlLocked = false;
+   115→   115→  stoppedByIntervention = false;
+   116→   116→  bikeMotorLimited = false;
+   117→   117→  powerLimit = 1;
+   118→   118→  hazardsOn = false;
+   119→   119→  demoAutoThrottle = false;
+   120→   120→
+   121→   121→  kin = {
+   122→   122→    speed: 0,
+   123→   123→    position: 0,
+   124→   124→    lateral: 0,
+   125→   125→    odometer: 0,
+   126→   126→    steering: 0,
+   127→   127→    throttle: 0,
+   128→   128→    brake: 0,
+   129→   129→    headingDeg: 0,
+   130→   130→    accel: 0,
+   131→   131→  };
+   132→   132→
+   133→   133→  helmet: HelmetState = { state: "HELMET_NOT_DETECTED", source: "SIMULATION" };
+   134→   134→  alcohol: AlcoholState = {
+   135→   135→    level: 0,
+   136→   136→    threshold: 40,
+   137→   137→    detected: false,
+   138→   138→    source: "SENSOR SIM",
+   139→   139→  };
+   140→   140→  drowsiness: DrowsinessState = {
+   141→   141→    level: "NORMAL",
+   142→   142→    eyeClosed: false,
+   143→   143→    closureDuration: 0,
+   144→   144→    score: 0,
+   145→   145→    source: "NONE",
+   146→   146→    blinkCount: 0,
+   147→   147→  };
+   148→   148→  driver: DriverState = {
+   149→   149→    faceDetected: false,
+   150→   150→    present: false,
+   151→   151→    attention: 100,
+   152→   152→    source: "NONE",
+   153→   153→  };
+   154→   154→  accident: AccidentState = { active: false, at: null, impactSpeed: 0 };
+   155→   155→
+   156→   156→  autonomy: AutonomyState = createAutonomyState();
+   157→   157→
+   158→   158→  /** live vision pipeline state (written by the camera hook) */
+   159→   159→  vision: VisionFrameState & { active: boolean; modelStatus: string } = {
+   160→   160→    active: false,
+   161→   161→    modelStatus: "OFF",
+   162→   162→    faceDetected: false,
+   163→   163→    eyeClosed: false,
+   164→   164→    blinkScore: 0,
+   165→   165→    headYaw: 0,
+   166→   166→    fps: 0,
+   167→   167→  };
+   168→   168→
+   169→   169→  simDrowsiness = false;
+   170→   170→
+   171→   171→  /* ----------------------------- timers --------------------------------- */
+   172→   172→  private safetyCheckTimer = 0;
+   173→   173→  private helmetCheckAnnounced = false;
+   174→   174→  private alcoholAt: number | null = null;
+   175→   175→  private drowsinessWarnAnnounced = false;
+   176→   176→  private criticalAnnounced = false;
+   177→   177→  private lastWarnBeep = 0;
+   178→   178→  private lastEventAt = new Map<string, number>();
+   179→   179→  private prevSeverity: SafetyStatus = "SAFE";
+   180→   180→  private prevAutonomyPhase: AutonomyPhase = "NONE";
+   181→   181→  private takeoverPlanned = false;
+   182→   182→  private faceAbsentSince: number | null = null;
+   183→   183→  private faceAbsentAnnounced = false;
+   184→   184→  private manualStopRequested = false;
+   185→   185→  private clock = 0;
+   186→   186→
+   187→   187→  sessionStartedAt: number | null = null;
+   188→   188→  sessionCounts = { drowsiness: 0, alcohol: 0, accident: 0, interventions: 0, safeStops: 0 };
+   189→   189→  private firstCriticalAt: number | null = null;
+   190→   190→  private sessionEventTally = { info: 0, warning: 0, critical: 0, ai: 0 };
+   191→   191→  private sessionIntervention: string | null = null;
+   192→   192→  private sessionReason: string | null = null;
+   193→   193→  private sessionResult: SessionRecord["result"] | null = null;
+   194→   194→
+   195→   195→  listener: Listener | null = null;
+   196→   196→
+   197→   197→  constructor(settings: AppSettings) {
+   198→   198→    this.settings = settings;
+   199→   199→    this.alcohol.threshold = settings.alcoholThreshold;
+   200→   200→  }
+   201→   201→
+   202→   202→  /* ============================== API ================================== */
+   203→   203→
+   204→   204→  selectVehicle(t: VehicleType) {
+   205→   205→    this.vehicleType = t;
+   206→   206→    this.reset(false);
+   207→   207→    this.emit("INFO", "SYSTEM", `${t} vehicle profile loaded`);
+   208→   208→  }
+   209→   209→
+   210→   210→  start() {
+   211→   211→    if (this.mode !== "IDLE" && this.mode !== "STOPPED") return;
+   212→   212→    if (this.stoppedByIntervention) {
+   213→   213→      this.emit(
+   214→   214→        "WARNING",
+   215→   215→        "SAFETY ENGINE",
+   216→   216→        "Vehicle locked after safety intervention — RESET required",
+   217→   217→      );
+   218→   218→      playCue("BLOCKED");
+   219→   219→      return;
+   220→   220→    }
+   221→   221→    if (this.mode === "STOPPED") {
+   222→   222→      // starting from a clean manual stop
+   223→   223→      this.mode = "IDLE";
+   224→   224→    }
+   225→   225→    this.mode = "SAFETY_CHECK";
+   226→   226→    this.safetyCheckTimer = 0;
+   227→   227→    this.helmetCheckAnnounced = false;
+   228→   228→    this.startBlockedReason = null;
+   229→   229→    this.emit("INFO", "SAFETY ENGINE", "Pre-start safety checks running…");
+   230→   230→    playCue("START");
+   231→   231→  }
+   232→   232→
+   233→   233→  requestManualStop() {
+   234→   234→    if (this.mode === "IDLE" || this.mode === "SAFETY_CHECK") return;
+   235→   235→    this.manualStopRequested = true;
+   236→   236→    this.emit("INFO", "VEHICLE ENGINE", "Manual stop requested");
+   237→   237→  }
+   238→   238→
+   239→   239→  emergencyStop() {
+   240→   240→    if (
+   241→   241→      this.mode === "IDLE" ||
+   242→   242→      this.mode === "SAFETY_CHECK" ||
+   243→   243→      this.mode === "STOPPED"
+   244→   244→    )
+   245→   245→      return;
+   246→   246→    this.emit("CRITICAL", "SAFETY ENGINE", "EMERGENCY STOP engaged by operator");
+   247→   247→    this.accident.active = false;
+   248→   248→    this.enterEmergency("Emergency stop engaged");
+   249→   249→  }
+   250→   250→
+   251→   251→  simulateAccident() {
+   252→   252→    if (this.accident.active) return;
+   253→   253→    this.accident = {
+   254→   254→      active: true,
+   255→   255→      at: this.clock,
+   256→   256→      impactSpeed: this.kin.speed * 3.6,
+   257→   257→    };
+   258→   258→    this.sessionCounts.accident += 1;
+   259→   259→    this.emit(
+   260→   260→      "CRITICAL",
+   261→   261→      "SIMULATION",
+   262→   262→      `Accident simulated — impact at ${this.kin.speed.toFixed(1) * 3.6 > 0 ? (this.kin.speed * 3.6).toFixed(0) : "0"} km/h`,
+   263→   263→    );
+   264→   264→    playCue("ACCIDENT");
+   265→   265→  }
+   266→   266→
+   267→   267→  setHelmetWorn(worn: boolean) {
+   268→   268→    if (this.vehicleType !== "BIKE") return;
+   269→   269→    this.helmet = {
+   270→   270→      state: worn ? "HELMET_DETECTED" : "HELMET_NOT_DETECTED",
+   271→   271→      source: "SIMULATION",
+   272→   272→    };
+   273→   273→    this.emit(
+   274→   274→      worn ? "INFO" : "WARNING",
+   275→   275→      "SIMULATION",
+   276→   276→      worn
+   277→   277→        ? "Helmet detected (simulated detector)"
+   278→   278→        : "Helmet removed — ignition interlock engaged",
+   279→   279→    );
+   280→   280→  }
+   281→   281→
+   282→   282→  triggerAlcohol(on: boolean) {
+   283→   283→    if (on) {
+   284→   284→      this.alcohol.level = Math.max(this.alcohol.level, 78);
+   285→   285→      this.alcohol.detected = true;
+   286→   286→      this.alcohol.source = "SENSOR SIM";
+   287→   287→      this.alcoholAt = this.clock;
+   288→   288→      this.sessionCounts.alcohol += 1;
+   289→   289→      this.emit(
+   290→   290→        "CRITICAL",
+   291→   291→        "SIMULATION",
+   292→   292→        `Alcohol sensor triggered — level ${this.alcohol.level} (threshold ${this.alcohol.threshold})`,
+   293→   293→      );
+   294→   294→      playCue("WARNING");
+   295→   295→    } else {
+   296→   296→      this.alcohol.level = 0;
+   297→   297→      this.alcohol.detected = false;
+   298→   298→      this.alcoholAt = null;
+   299→   299→      this.emit("INFO", "SIMULATION", "Alcohol sensor cleared");
+   300→   300→    }
+   301→   301→  }
+   302→   302→
+   303→   303→  setAlcoholLevel(v: number) {
+   304→   304→    this.alcohol.level = v;
+   305→   305→    const detected = v > this.alcohol.threshold;
+   306→   306→    if (detected && !this.alcohol.detected) {
+   307→   307→      this.alcohol.detected = true;
+   308→   308→      this.alcoholAt = this.clock;
+   309→   309→      this.sessionCounts.alcohol += 1;
+   310→   310→      this.emit(
+   311→   311→        "CRITICAL",
+   312→   312→        "SIMULATION",
+   313→   313→        `Alcohol sensor above threshold — level ${v} (threshold ${this.alcohol.threshold})`,
+   314→   314→      );
+   315→   315→      playCue("WARNING");
+   316→   316→    } else if (!detected && this.alcohol.detected) {
+   317→   317→      this.alcohol.detected = false;
+   318→   318→      this.alcoholAt = null;
+   319→   319→      this.emit("INFO", "SIMULATION", "Alcohol sensor below threshold");
+   320→   320→    }
+   321→   321→  }
+   322→   322→
+   323→   323→  triggerDrowsiness(on: boolean) {
+   324→   324→    this.simDrowsiness = on;
+   325→   325→    if (on) {
+   326→   326→      this.sessionCounts.drowsiness += 1;
+   327→   327→      this.emit("WARNING", "SIMULATION", "Drowsiness simulation enabled — eyes closed");
+   328→   328→    } else {
+   329→   329→      this.emit("INFO", "SIMULATION", "Drowsiness simulation disabled");
+   330→   330→    }
+   331→   331→  }
+   332→   332→
+   333→   333→  reset(announce = true) {
+   334→   334→    this.mode = "IDLE";
+   335→   335→    this.safetyStatus = "SAFE";
+   336→   336→    this.controlMode = "MANUAL";
+   337→   337→    this.decision = {
+   338→   338→      severity: "SAFE",
+   339→   339→      reason: "Standby",
+   340→   340→      recommendedAction: "NONE",
+   341→   341→      controlMode: "MANUAL",
+   342→   342→      evidence: [],
+   343→   343→      trigger: null,
+   344→   344→    };
+   345→   345→    this.engineOn = false;
+   346→   346→    this.startBlockedReason = null;
+   347→   347→    this.controlLocked = false;
+   348→   348→    this.stoppedByIntervention = false;
+   349→   349→    this.bikeMotorLimited = false;
+   350→   350→    this.powerLimit = 1;
+   351→   351→    this.hazardsOn = false;
+   352→   352→    this.kin = {
+   353→   353→      speed: 0,
+   354→   354→      position: 0,
+   355→   355→      lateral: 0,
+   356→   356→      odometer: 0,
+   357→   357→      steering: 0,
+   358→   358→      throttle: 0,
+   359→   359→      brake: 0,
+   360→   360→      headingDeg: 0,
+   361→   361→      accel: 0,
+   362→   362→    };
+   363→   363→    this.helmet = { state: "HELMET_NOT_DETECTED", source: "SIMULATION" };
+   364→   364→    this.alcohol = {
+   365→   365→      level: 0,
+   366→   366→      threshold: this.settings.alcoholThreshold,
+   367→   367→      detected: false,
+   368→   368→      source: "SENSOR SIM",
+   369→   369→    };
+   370→   370→    this.drowsiness = {
+   371→   371→      level: "NORMAL",
+   372→   372→      eyeClosed: false,
+   373→   373→      closureDuration: 0,
+   374→   374→      score: 0,
+   375→   375→      source: this.drowsiness.source,
+   376→   376→      blinkCount: 0,
+   377→   377→    };
+   378→   378→    this.simDrowsiness = false;
+   379→   379→    this.accident = { active: false, at: null, impactSpeed: 0 };
+   380→   380→    this.autonomy = createAutonomyState();
+   381→   381→    this.alcoholAt = null;
+   382→   382→    this.drowsinessWarnAnnounced = false;
+   383→   383→    this.criticalAnnounced = false;
+   384→   384→    this.takeoverPlanned = false;
+   385→   385→    this.manualStopRequested = false;
+   386→   386→    this.prevSeverity = "SAFE";
+   387→   387→    this.prevAutonomyPhase = "NONE";
+   388→   388→    this.firstCriticalAt = null;
+   389→   389→    this.sessionStartedAt = null;
+   390→   390→    this.sessionCounts = { drowsiness: 0, alcohol: 0, accident: 0, interventions: 0, safeStops: 0 };
+   391→   391→    this.sessionEventTally = { info: 0, warning: 0, critical: 0, ai: 0 };
+   392→   392→    this.sessionIntervention = null;
+   393→   393→    this.sessionReason = null;
+   394→   394→    this.sessionResult = null;
+   395→   395→    if (announce) this.emit("INFO", "SYSTEM", "Scenario reset — system nominal");
+   396→   396→  }
+   397→   397→
+   398→   398→  /* ============================ main loop ============================== */
+   399→   399→
+   400→   400→  tick(rawDt: number) {
+   401→   401→    const dt = Math.min(rawDt, 0.05);
+   402→   402→    this.clock += dt;
+   403→   403→    const s = this.settings;
+   404→   404→
+   405→   405→    // ---------- vision merge ----------
+   406→   406→    this.updateDriverAndDrowsiness(dt, s);
+   407→   407→
+   408→   408→    // ---------- mode machine ----------
+   409→   409→    switch (this.mode) {
+   410→   410→      case "SAFETY_CHECK":
+   411→   411→        this.tickSafetyCheck(dt);
+   412→   412→        break;
+   413→   413→      case "READY":
+   414→   414→      case "MANUAL":
+   415→   415→      case "WARNING":
+   416→   416→        this.tickDriving(dt, s);
+   417→   417→        break;
+   418→   418→      case "AUTONOMOUS":
+   419→   419→        this.tickAutonomous(dt);
+   420→   420→        break;
+   421→   421→      case "STOPPING":
+   422→   422→        this.tickStopping(dt);
+   423→   423→        break;
+   424→   424→      case "EMERGENCY":
+   425→   425→        this.tickEmergency(dt);
+   426→   426→        break;
+   427→   427→      case "STOPPED":
+   428→   428→        this.kin.throttle = 0;
+   429→   429→        this.kin.brake = 0;
+   430→   430→        this.kin.steering = 0;
+   431→   431→        break;
+   432→   432→      case "IDLE":
+   433→   433→        break;
+   434→   434→    }
+   435→   435→
+   436→   436→    // ---------- safety evaluation (10 Hz) ----------
+   437→   437→    this.safetyPulse(dt, s);
+   438→   438→  }
+   439→   439→
+   440→   440→  /* --------------------------- sub-routines ----------------------------- */
+   441→   441→
+   442→   442→  private tickSafetyCheck(dt: number) {
+   443→   443→    this.safetyCheckTimer += dt;
+   444→   444→    if (!this.helmetCheckAnnounced && this.safetyCheckTimer > 0.5) {
+   445→   445→      this.helmetCheckAnnounced = true;
+   446→   446→      if (VEHICLE_RULES[this.vehicleType].requireHelmetToStart) {
+   447→   447→        this.emit(
+   448→   448→          this.helmet.state === "HELMET_DETECTED" ? "INFO" : "WARNING",
+   449→   449→          "AI VISION",
+   450→   450→          this.helmet.state === "HELMET_DETECTED"
+   451→   451→            ? "Helmet detected (simulated detector)"
+   452→   452→            : "Helmet NOT detected",
+   453→   453→        );
+   454→   454→      }
+   455→   455→      this.emit(
+   456→   456→        this.alcohol.detected ? "CRITICAL" : "INFO",
+   457→   457→        "AI VISION",
+   458→   458→        this.alcohol.detected
+   459→   459→          ? `Alcohol sensor reading ${this.alcohol.level} — above threshold`
+   460→   460→          : "Alcohol sensor reading 0 — within safe range",
+   461→   461→      );
+   462→   462→    }
+   463→   463→    if (this.safetyCheckTimer >= 1.6) {
+   464→   464→      // finalize checks
+   465→   465→      const blockedHelmet =
+   466→   466→        VEHICLE_RULES[this.vehicleType].requireHelmetToStart &&
+   467→   467→        this.helmet.state !== "HELMET_DETECTED";
+   468→   468→      const blockedAlcohol = this.alcohol.detected;
+   469→   469→      if (blockedHelmet || blockedAlcohol) {
+   470→   470→        this.mode = "IDLE";
+   471→   471→        this.engineOn = false;
+   472→   472→        this.startBlockedReason = blockedHelmet
+   473→   473→          ? "HELMET NOT DETECTED"
+   474→   474→          : "ALCOHOL DETECTED";
+   475→   475→        this.emit(
+   476→   476→          "CRITICAL",
+   477→   477→          "SAFETY ENGINE",
+   478→   478→          `START BLOCKED — ${this.startBlockedReason}`,
+   479→   479→        );
+   480→   480→        this.safetyStatus = "CRITICAL";
+   481→   481→        this.decision = {
+   482→   482→          severity: "CRITICAL",
+   483→   483→          reason: blockedHelmet
+   484→   484→            ? "Helmet interlock: no helmet detected"
+   485→   485→            : "Alcohol interlock: sensor above threshold",
+   486→   486→          recommendedAction: "BLOCK_START",
+   487→   487→          controlMode: "LOCKED",
+   488→   488→          evidence: [],
+   489→   489→          trigger: blockedHelmet ? "HELMET" : "ALCOHOL",
+   490→   490→        };
+   491→   491→        this.sessionEventTally.critical += 1;
+   492→   492→        this.prevSeverity = "CRITICAL";
+   493→   493→        playCue("BLOCKED");
+   494→   494→      } else {
+   495→   495→        this.mode = "READY";
+   496→   496→        this.engineOn = true;
+   497→   497→        this.hazardsOn = false;
+   498→   498→        this.sessionStartedAt = Date.now();
+   499→   499→        this.emit("SAFE", "SAFETY ENGINE", "Safety checks passed");
+   500→   500→        this.emit("INFO", "VEHICLE ENGINE", "Engine started — manual control available");
+   501→   501→      }
+   502→   502→    }
+   503→   503→  }
+   504→   504→
+   505→   505→  private tickDriving(dt: number, s: AppSettings) {
+   506→   506→    // manual / warning driving: gather inputs
+   507→   507→    let throttle = this.kin.throttle;
+   508→   508→    const brake = this.kin.brake;
+   509→   509→    const steer = this.kin.steering;
+   510→   510→
+   511→   511→    if (this.demoAutoThrottle) {
+   512→   512→      const cruise = (s.cruiseSpeed[this.vehicleType] / 3.6) * 0.92;
+   513→   513→      throttle = this.kin.speed < cruise ? 1 : 0.05;
+   514→   514→    }
+   515→   515→
+   516→   516→    const res = stepPhysics(
+   517→   517→      this.kin.speed,
+   518→   518→      this.kin.position,
+   519→   519→      this.kin.lateral,
+   520→   520→      this.kin.odometer,
+   521→   521→      VEHICLE_SPECS[this.vehicleType],
+   522→   522→      { throttle, brake, steer, powerLimit: this.powerLimit },
+   523→   523→      dt,
+   524→   524→      null,
+   525→   525→    );
+   526→   526→    this.applyPhysics(res);
+   527→   527→
+   528→   528→    // mode semantics
+   529→   529→    if (this.decision.severity === "WARNING") {
+   530→   530→      this.mode = "WARNING";
+   531→   531→    } else {
+   532→   532→      this.mode = this.kin.speed > 0.5 ? "MANUAL" : "READY";
+   533→   533→    }
+   534→   534→
+   535→   535→    if (this.manualStopRequested) {
+   536→   536→      this.manualStopRequested = false;
+   537→   537→      this.beginControlledStop("MANUAL_STOP");
+   538→   538→    }
+   539→   539→  }
+   540→   540→
+   541→   541→  private tickAutonomous(dt: number) {
+   542→   542→    const { cmd, done, phaseChanged } = autonomyTick(
+   543→   543→      this.autonomy,
+   544→   544→      this.kin.speed,
+   545→   545→      this.kin.lateral,
+   546→   546→      this.kin.position,
+   547→   547→      VEHICLE_SPECS[this.vehicleType],
+   548→   548→      dt,
+   549→   549→    );
+   550→   550→    if (phaseChanged) this.onAutonomyPhase(phaseChanged);
+   551→   551→
+   552→   552→    const res = stepPhysics(
+   553→   553→      this.kin.speed,
+   554→   554→      this.kin.position,
+   555→   555→      this.kin.lateral,
+   556→   556→      this.kin.odometer,
+   557→   557→      VEHICLE_SPECS[this.vehicleType],
+   558→   558→      {
+   559→   559→        throttle: cmd.throttle,
+   560→   560→        brake: cmd.brake,
+   561→   561→        steer: 0,
+   562→   562→        powerLimit: 1,
+   563→   563→      },
+   564→   564→      dt,
+   565→   565→      cmd.lateralTarget,
+   566→   566→    );
+   567→   567→    this.applyPhysics(res);
+   568→   568→
+   569→   569→    if (done) {
+   570→   570→      this.finalizeStop("SAFE_STOP");
+   571→   571→    }
+   572→   572→  }
+   573→   573→
+   574→   574→  private tickStopping(dt: number) {
+   575→   575→    const res = stepPhysics(
+   576→   576→      this.kin.speed,
+   577→   577→      this.kin.position,
+   578→   578→      this.kin.lateral,
+   579→   579→      this.kin.odometer,
+   580→   580→      VEHICLE_SPECS[this.vehicleType],
+   581→   581→      { throttle: 0, brake: this.pendingBrake, steer: 0, powerLimit: 1 },
+   582→   582→      dt,
+   583→   583→      this.pendingLateralTarget,
+   584→   584→    );
+   585→   585→    this.applyPhysics(res);
+   586→   586→    if (this.kin.speed <= STOP_SPEED_EPS) {
+   587→   587→      this.kin.speed = 0;
+   588→   588→      this.finalizeStop(this.pendingStopResult);
+   589→   589→    }
+   590→   590→  }
+   591→   591→
+   592→   592→  private tickEmergency(dt: number) {
+   593→   593→    const res = stepPhysics(
+   594→   594→      this.kin.speed,
+   595→   595→      this.kin.position,
+   596→   596→      this.kin.lateral,
+   597→   597→      this.kin.odometer,
+   598→   598→      VEHICLE_SPECS[this.vehicleType],
+   599→   599→      { throttle: 0, brake: 1, steer: 0, powerLimit: 1 },
+   600→   600→      dt,
+   601→   601→      null,
+   602→   602→    );
+   603→   603→    this.applyPhysics(res);
+   604→   604→    if (this.kin.speed <= STOP_SPEED_EPS) {
+   605→   605→      this.kin.speed = 0;
+   606→   606→      this.finalizeStop("EMERGENCY_STOP");
+   607→   607→    }
+   608→   608→  }
+   609→   609→
+   610→   610→  private pendingStopResult: SessionRecord["result"] = "SAFE_STOP";
+   611→   611→  private pendingLateralTarget: number | null = null;
+   612→   612→  private pendingBrake = 0.55;
+   613→   613→
+   614→   614→  private beginControlledStop(
+   615→   615→    result: SessionRecord["result"],
+   616→   616→    lateralTarget: number | null = null,
+   617→   617→    brake = 0.55,
+   618→   618→  ) {
+   619→   619→    if (this.mode === "STOPPING" || this.mode === "STOPPED") return;
+   620→   620→    this.pendingStopResult = result;
+   621→   621→    this.pendingLateralTarget = lateralTarget;
+   622→   622→    this.pendingBrake = brake;
+   623→   623→    this.mode = "STOPPING";
+   624→   624→    this.hazardsOn = true;
+   625→   625→    this.controlLocked = true;
+   626→   626→    if (!this.sessionReason) {
+   627→   627→      this.sessionReason =
+   628→   628→        this.decision.trigger === null
+   629→   629→          ? "Operator requested stop"
+   630→   630→          : this.decision.reason;
+   631→   631→    }
+   632→   632→    this.emit("AI", "SAFETY ENGINE", "Controlled stop engaged — manual control disabled");
+   633→   633→  }
+   634→   634→
+   635→   635→  private enterEmergency(reason: string) {
+   636→   636→    this.mode = "EMERGENCY";
+   637→   637→    this.controlLocked = true;
+   638→   638→    this.hazardsOn = true;
+   639→   639→    this.safetyStatus = "EMERGENCY";
+   640→   640→    this.sessionReason = reason;
+   641→   641→    this.decision = {
+   642→   642→      severity: "EMERGENCY",
+   643→   643→      reason,
+   644→   644→      recommendedAction: "EMERGENCY_STOP",
+   645→   645→      controlMode: "LOCKED",
+   646→   646→      evidence: [],
+   647→   647→      trigger: "EMERGENCY",
+   648→   648→    };
+   649→   649→  }
+   650→   650→
+   651→   651→  private onAutonomyPhase(phase: AutonomyPhase) {
+   652→   652→    if (phase === "DECELERATION") {
+   653→   653→      this.emit("AI", "SAFETY ENGINE", "Autonomous safety mode active — reducing speed");
+   654→   654→    } else if (phase === "ROADSIDE_ALIGNMENT") {
+   655→   655→      this.emit("AI", "SAFETY ENGINE", "Roadside alignment — trajectory selected");
+   656→   656→    } else if (phase === "SAFE_STOP") {
+   657→   657→      this.emit("AI", "SAFETY ENGINE", "Safe stopping zone reached — final braking");
+   658→   658→    }
+   659→   659→  }
+   660→   660→
+   661→   661→  private finalizeStop(result: SessionRecord["result"]) {
+   662→   662→    this.mode = "STOPPED";
+   663→   663→    this.kin.speed = 0;
+   664→   664→    this.hazardsOn = true;
+   665→   665→    this.controlLocked = true;
+   666→   666→    if (result === "EMERGENCY_STOP") {
+   667→   667→      this.safetyStatus = "EMERGENCY";
+   668→   668→      this.emit("CRITICAL", "VEHICLE ENGINE", "Vehicle stopped — EMERGENCY");
+   669→   669→    } else {
+   670→   670→      this.safetyStatus = "SAFE";
+   671→   671→      this.emit("SAFE", "VEHICLE ENGINE", "Vehicle stopped safely in designated zone");
+   672→   672→      playCue("SAFE_STOP");
+   673→   673→    }
+   674→   674→    if (result === "SAFE_STOP") this.sessionCounts.safeStops += 1;
+   675→   675→    this.stoppedByIntervention = true;
+   676→   676→    this.emitFinalReport(result);
+   677→   677→  }
+   678→   678→
+   679→   679→  /* ------------------------------ vision -------------------------------- */
+   680→   680→
+   681→   681→  private updateDriverAndDrowsiness(dt: number, s: AppSettings) {
+   682→   682→    const visionActive = this.vision.active;
+   683→   683→    const source: DetectionSource = this.simDrowsiness
+   684→   684→      ? "SIMULATION"
+   685→   685→      : visionActive
+   686→   686→        ? "CAMERA"
+   687→   687→        : "NONE";
+   688→   688→
+   689→   689→    const eyeClosed =
+   690→   690→      this.simDrowsiness || (visionActive && s.drowsinessEnabled && this.vision.eyeClosed);
+   691→   691→
+   692→   692→    // temporal eye-closure accumulator
+   693→   693→    if (eyeClosed) {
+   694→   694→      this.drowsiness.closureDuration += dt;
+   695→   695→      this.drowsiness.eyeClosed = true;
+   696→   696→      this.drowsiness.source = source;
+   697→   697→      const warn = Math.max(0.6, s.warningDuration);
+   698→   698→      const crit = Math.max(warn + 0.4, s.criticalDuration);
+   699→   699→      this.drowsiness.level =
+   700→   700→        this.drowsiness.closureDuration >= crit
+   701→   701→          ? "CRITICAL"
+   702→   702→          : this.drowsiness.closureDuration >= warn
+   703→   703→            ? "WARNING"
+   704→   704→            : this.drowsiness.closureDuration > 0.18
+   705→   705→              ? "BLINK"
+   706→   706→              : "NORMAL";
+   707→   707→      this.drowsiness.score = Math.min(
+   708→   708→        100,
+   709→   709→        (this.drowsiness.closureDuration / crit) * 100,
+   710→   710→      );
+   711→   711→      if (this.drowsiness.level === "WARNING" && !this.drowsinessWarnAnnounced) {
+   712→   712→        this.drowsinessWarnAnnounced = true;
+   713→   713→        this.emit(
+   714→   714→          "WARNING",
+   715→   715→          source === "CAMERA" ? "AI VISION" : "SIMULATION",
+   716→   716→          `Drowsiness warning — eyes closed ${this.drowsiness.closureDuration.toFixed(1)} s`,
+   717→   717→        );
+   718→   718→        playCue("WARNING");
+   719→   719→      }
+   720→   720→      if (this.drowsiness.level === "CRITICAL" && !this.criticalAnnounced) {
+   721→   721→        this.criticalAnnounced = true;
+   722→   722→        this.emit(
+   723→   723→          "CRITICAL",
+   724→   724→          source === "CAMERA" ? "AI VISION" : "SIMULATION",
+   725→   725→          `Critical drowsiness — eyes closed ${this.drowsiness.closureDuration.toFixed(1)} s, driver unresponsive`,
+   726→   726→        );
+   727→   727→        playCue("CRITICAL");
+   728→   728→      }
+   729→   729→    } else {
+   730→   730→      if (this.drowsiness.closureDuration > 0.18) {
+   731→   731→        this.drowsiness.blinkCount += 1;
+   732→   732→      }
+   733→   733→      const wasWarning =
+   734→   734→        this.drowsiness.level === "WARNING" || this.drowsiness.level === "CRITICAL";
+   735→   735→      if (wasWarning) {
+   736→   736→        this.emit("INFO", "SYSTEM", "Driver alertness restored — drowsiness cleared");
+   737→   737→      }
+   738→   738→      this.drowsiness.closureDuration = 0;
+   739→   739→      this.drowsiness.eyeClosed = false;
+   740→   740→      this.drowsiness.level = "NORMAL";
+   741→   741→      this.drowsiness.score = Math.max(0, this.drowsiness.score - dt * 60);
+   742→   742→      this.drowsinessWarnAnnounced = false;
+   743→   743→      this.criticalAnnounced = false;
+   744→   744→      if (this.simDrowsiness) {
+   745→   745→        // sim toggle on but treated as open (shouldn't happen) — keep closed flag
+   746→   746→        this.drowsiness.eyeClosed = true;
+   747→   747→      }
+   748→   748→    }
+   749→   749→    this.drowsiness.source = this.simDrowsiness
+   750→   750→      ? "SIMULATION"
+   751→   751→      : visionActive
+   752→   752→        ? "CAMERA"
+   753→   753→        : "NONE";
+   754→   754→
+   755→   755→    // driver presence
+   756→   756→    if (visionActive && s.driverPresenceDetection) {
+   757→   757→      this.driver.faceDetected = this.vision.faceDetected;
+   758→   758→      this.driver.source = "CAMERA";
+   759→   759→      if (!this.vision.faceDetected) {
+   760→   760→        if (this.faceAbsentSince === null) this.faceAbsentSince = this.clock;
+   761→   761→        if (
+   762→   762→          !this.faceAbsentAnnounced &&
+   763→   763→          this.clock - this.faceAbsentSince > s.faceAbsenceTimeout
+   764→   764→        ) {
+   765→   765→          this.faceAbsentAnnounced = true;
+   766→   766→          this.emit("WARNING", "AI VISION", "Driver face not detected by camera");
+   767→   767→        }
+   768→   768→      } else {
+   769→   769→        if (this.faceAbsentAnnounced) {
+   770→   770→          this.emit("INFO", "AI VISION", "Driver face re-detected");
+   771→   771→        }
+   772→   772→        this.faceAbsentSince = null;
+   773→   773→        this.faceAbsentAnnounced = false;
+   774→   774→      }
+   775→   775→    } else {
+   776→   776→      this.driver.faceDetected = true;
+   777→   777→      this.driver.source = "NONE";
+   778→   778→      this.faceAbsentSince = null;
+   779→   779→      this.faceAbsentAnnounced = false;
+   780→   780→    }
+   781→   781→    this.driver.present =
+   782→   782→      this.driver.source !== "CAMERA" || this.driver.faceDetected;
+   783→   783→    const attentionTarget =
+   784→   784→      this.drowsiness.level === "CRITICAL"
+   785→   785→        ? 12
+   786→   786→        : this.drowsiness.level === "WARNING"
+   787→   787→          ? 45
+   788→   788→          : this.drowsiness.level === "BLINK"
+   789→   789→            ? 88
+   790→   790→            : !this.driver.present
+   791→   791→              ? 55
+   792→   792→              : 97;
+   793→   793→    this.driver.attention +=
+   794→   794→      (attentionTarget - this.driver.attention) * Math.min(1, dt * 3);
+   795→   795→  }
+   796→   796→
+   797→   797→  private alcoholEscalated(): boolean {
+   798→   798→    if (this.alcoholAt === null) return false;
+   799→   799→    return this.clock - this.alcoholAt >= this.settings.interventionDelay;
+   800→   800→  }
+   801→   801→
+   802→   802→  /* --------------------------- safety pulse ------------------------------ */
+   803→   803→
+   804→   804→  private safetyAccum = 0;
+   805→   805→
+   806→   806→  private safetyPulse(dt: number, s: AppSettings) {
+   807→   807→    this.safetyAccum += dt;
+   808→   808→    if (this.safetyAccum < 0.1) return;
+   809→   809→    this.safetyAccum = 0;
+   810→   810→
+   811→   811→    const input = {
+   812→   812→      vehicleType: this.vehicleType,
+   813→   813→      vehicleMode: this.mode,
+   814→   814→      helmet: this.helmet,
+   815→   815→      alcohol: this.alcohol,
+   816→   816→      alcoholEscalated: this.alcoholEscalated(),
+   817→   817→      drowsiness: this.drowsiness,
+   818→   818→      driver: this.driver,
+   819→   819→      accident: this.accident,
+   820→   820→      engineOn: this.engineOn,
+   821→   821→      moving: this.kin.speed > 0.5,
+   822→   822→    };
+   823→   823→    const decision = evaluateSafety(input);
+   824→   824→    this.decision = decision;
+   825→   825→
+   826→   826→    // severity transitions → events + audio
+   827→   827→    if (decision.severity !== this.prevSeverity) {
+   828→   828→      this.onSeverityChange(this.prevSeverity, decision.severity, decision);
+   829→   829→      this.prevSeverity = decision.severity;
+   830→   830→    }
+   831→   831→
+   832→   832→    // periodic warning beeps while in warning
+   833→   833→    if (
+   834→   834→      decision.severity === "WARNING" &&
+   835→   835→      this.mode !== "IDLE" &&
+   836→   836→      this.clock - this.lastWarnBeep > 2.2
+   837→   837→    ) {
+   838→   838→      this.lastWarnBeep = this.clock;
+   839→   839→      playCue("WARNING");
+   840→   840→    }
+   841→   841→
+   842→   842→    // apply decision actions to the state machine
+   843→   843→    // EMERGENCY applies from any active mode (including autonomous)
+   844→   844→    if (
+   845→   845→      decision.recommendedAction === "EMERGENCY_STOP" &&
+   846→   846→      this.mode !== "IDLE" &&
+   847→   847→      this.mode !== "SAFETY_CHECK" &&
+   848→   848→      this.mode !== "STOPPED"
+   849→   849→    ) {
+   850→   850→      this.sessionCounts.interventions += 1;
+   851→   851→      this.sessionIntervention = "Emergency stop";
+   852→   852→      this.enterEmergency("Accident / impact detected");
+   853→   853→      return;
+   854→   854→    }
+   855→   855→
+   856→   856→    if (this.mode === "READY" || this.mode === "MANUAL" || this.mode === "WARNING") {
+   857→   857→      switch (decision.recommendedAction) {
+   858→   858→        case "WARN":
+   859→   859→          this.controlLocked = false;
+   860→   860→          this.safetyStatus = "WARNING";
+   861→   861→          break;
+   862→   862→        case "REDUCE_POWER": {
+   863→   863→          // bike: motor power reduced → glide to a controlled stop
+   864→   864→          this.safetyStatus = "CRITICAL";
+   865→   865→          this.sessionCounts.interventions += 1;
+   866→   866→          this.sessionIntervention = "Motor power reduction + controlled stop";
+   867→   867→          this.bikeMotorLimited = true;
+   868→   868→          this.powerLimit = 0.25;
+   869→   869→          this.emit(
+   870→   870→            "WARNING",
+   871→   871→            "SAFETY ENGINE",
+   872→   872→            "Motor power reduced — controlled shutdown",
+   873→   873→          );
+   874→   874→          if (this.kin.speed > 0.2) {
+   875→   875→            this.beginControlledStop("SAFE_STOP", null, 0.35);
+   876→   876→          } else {
+   877→   877→            this.finalizeStop("SAFE_STOP");
+   878→   878→          }
+   879→   879→          break;
+   880→   880→        }
+   881→   881→        case "CONTROLLED_STOP":
+   882→   882→          this.safetyStatus = "CRITICAL";
+   883→   883→          this.sessionCounts.interventions += 1;
+   884→   884→          this.sessionIntervention = "Controlled safety stop";
+   885→   885→          this.beginControlledStop("SAFE_STOP");
+   886→   886→          break;
+   887→   887→        case "AUTONOMOUS_STOP":
+   888→   888→          this.safetyStatus = "CRITICAL";
+   889→   889→          this.beginAutonomousStop(s);
+   890→   890→          break;
+   891→   891→        case "BLOCK_START":
+   892→   892→          // engine running but interlock demands hold (e.g., alcohol while idle)
+   893→   893→          this.safetyStatus = "CRITICAL";
+   894→   894→          if (this.engineOn) {
+   895→   895→            this.beginControlledStop("SAFE_STOP");
+   896→   896→          }
+   897→   897→          break;
+   898→   898→        default:
+   899→   899→          this.safetyStatus = this.mode === "STOPPED" ? this.safetyStatus : "SAFE";
+   900→   900→      }
+   901→   901→    } else if (
+   902→   902→      this.mode === "IDLE" &&
+   903→   903→      decision.recommendedAction === "BLOCK_START" &&
+   904→   904→      decision.trigger === "HELMET"
+   905→   905→    ) {
+   906→   906→      // keep the interlock visible on the dashboard
+   907→   907→      this.safetyStatus = "WARNING";
+   908→   908→      this.startBlockedReason = this.startBlockedReason ?? "HELMET NOT DETECTED";
+   909→   909→    }
+   910→   910→  }
+   911→   911→
+   912→   912→  private beginAutonomousStop(s: AppSettings) {
+   913→   913→    if (this.mode === "AUTONOMOUS") return;
+   914→   914→    this.sessionCounts.interventions += 1;
+   915→   915→    this.sessionIntervention = "Autonomous roadside safety stop";
+   916→   916→    this.mode = "AUTONOMOUS";
+   917→   917→    this.controlLocked = true;
+   918→   918→    this.hazardsOn = true;
+   919→   919→    this.firstCriticalAt ??= Date.now();
+   920→   920→    if (!this.takeoverPlanned) {
+   921→   921→      this.takeoverPlanned = true;
+   922→   922→      this.sessionReason = this.decision.reason;
+   923→   923→      planTakeover(
+   924→   924→        this.autonomy,
+   925→   925→        this.kin.speed,
+   926→   926→        this.kin.position,
+   927→   927→        this.kin.lateral,
+   928→   928→        VEHICLE_SPECS[this.vehicleType],
+   929→   929→        s.roadsideTarget,
+   930→   930→      );
+   931→   931→      this.emit(
+   932→   932→        "AI",
+   933→   933→        "SAFETY ENGINE",
+   934→   934→        "AUTONOMOUS TAKEOVER — manual control disabled",
+   935→   935→      );
+   936→   936→      this.emit(
+   937→   937→        "AI",
+   938→   938→        "VEHICLE ENGINE",
+   939→   939→        `Safe stop zone designated at +${Math.round(this.autonomy.stopZone.position - this.kin.position)} m`,
+   940→   940→      );
+   941→   941→      playCue("TAKEOVER");
+   942→   942→    }
+   943→   943→  }
+   944→   944→
+   945→   945→  private onSeverityChange(
+   946→   946→    prev: SafetyStatus,
+   947→   947→    next: SafetyStatus,
+   948→   948→    decision: SafetyDecision,
+   949→   949→  ) {
+   950→   950→    if (next === "CRITICAL" || next === "EMERGENCY") {
+   951→   951→      this.firstCriticalAt ??= Date.now();
+   952→   952→      this.sessionEventTally.critical += 1;
+   953→   953→      if (decision.trigger === "DROWSINESS") {
+   954→   954→        this.sessionCounts.interventions += 0; // counted at action application
+   955→   955→      }
+   956→   956→    } else if (next === "WARNING") {
+   957→   957→      this.sessionEventTally.warning += 1;
+   958→   958→    }
+   959→   959→    this.emit(
+   960→   960→      next === "SAFE"
+   961→   961→        ? "SAFE"
+   962→   962→        : next === "WARNING"
+   963→   963→          ? "WARNING"
+   964→   964→          : "CRITICAL",
+   965→   965→      "SAFETY ENGINE",
+   966→   966→      decision.reason,
+   967→   967→    );
+   968→   968→  }
+   969→   969→
+   970→   970→  /* ------------------------------ physics -------------------------------- */
+   971→   971→
+   972→   972→  private applyPhysics(res: {
+   973→   973→    speed: number;
+   974→   974→    position: number;
+   975→   975→    lateral: number;
+   976→   976→    odometer: number;
+   977→   977→    headingDeg: number;
+   978→   978→  }) {
+   979→   979→    this.kin.accel = (res.speed - this.kin.speed) / 0.016;
+   980→   980→    this.kin.speed = res.speed;
+   981→   981→    this.kin.position = res.position;
+   982→   982→    this.kin.lateral = res.lateral;
+   983→   983→    this.kin.odometer = res.odometer;
+   984→   984→    this.kin.headingDeg = res.headingDeg;
+   985→   985→  }
+   986→   986→
+   987→   987→  /* ------------------------------- events -------------------------------- */
+   988→   988→
+   989→   989→  emit(type: TimelineEvent["type"], source: TimelineEvent["source"], message: string) {
+   990→   990→    // dedupe identical messages within 1.5 s
+   991→   991→    const key = `${type}:${message}`;
+   992→   992→    const last = this.lastEventAt.get(key) ?? -10;
+   993→   993→    if (this.clock - last < 1.5) return;
+   994→   994→    this.lastEventAt.set(key, this.clock);
+   995→   995→
+   996→   996→    if (type === "INFO") this.sessionEventTally.info += 1;
+   997→   997→    if (type === "WARNING") this.sessionEventTally.warning += 1;
+   998→   998→    if (type === "CRITICAL") this.sessionEventTally.critical += 1;
+   999→   999→    if (type === "AI") this.sessionEventTally.ai += 1;
+  1000→  1000→
+  1001→  1001→    const e: TimelineEvent = {
+  1002→  1002→      id: makeEventId(),
+  1003→  1003→      ts: Date.now(),
+  1004→  1004→      type,
+  1005→  1005→      source,
+  1006→  1006→      message,
+  1007→  1007→    };
+  1008→  1008→    this.listener?.onEvent(e);
+  1009→  1009→  }
+  1010→  1010→
+  1011→  1011→  private emitFinalReport(result: SessionRecord["result"]) {
+  1012→  1012→    const durationSec = this.sessionStartedAt
+  1013→  1013→      ? (Date.now() - this.sessionStartedAt) / 1000
+  1014→  1014→      : 0;
+  1015→  1015→    const interventionTimeSec =
+  1016→  1016→      this.firstCriticalAt && this.sessionStartedAt
+  1017→  1017→        ? (Date.now() - this.firstCriticalAt) / 1000
+  1018→  1018→        : null;
+  1019→  1019→    const record: SessionRecord = {
+  1020→  1020→      id: makeSessionId(),
+  1021→  1021→      vehicle: this.vehicleType,
+  1022→  1022→      startedAt: this.sessionStartedAt ?? Date.now(),
+  1023→  1023→      durationSec,
+  1024→  1024→      result,
+  1025→  1025→      intervention: this.sessionIntervention,
+  1026→  1026→      interventionTimeSec,
+  1027→  1027→      reason:
+  1028→  1028→        this.sessionReason ??
+  1029→  1029→        (this.decision.trigger
+  1030→  1030→          ? this.decision.reason
+  1031→  1031→          : result === "MANUAL_STOP"
+  1032→  1032→            ? "Operator requested stop"
+  1033→  1033→            : "Routine stop"),
+  1034→  1034→      eventCounts: { ...this.sessionEventTally },
+  1035→  1035→      counts: { ...this.sessionCounts },
+  1036→  1036→    };
+  1037→  1037→    this.sessionResult = result;
+  1038→  1038→    this.listener?.onSessionEnd(record);
+  1039→  1039→  }
+  1040→  1040→
+  1041→  1041→  /* ------------------------------ snapshot ------------------------------- */
+  1042→  1042→
+  1043→  1043→  snapshot(): EngineSnapshot {
+  1044→  1044→    return {
+  1045→  1045→      vehicleType: this.vehicleType,
+  1046→  1046→      mode: this.mode,
+  1047→  1047→      safetyStatus: this.safetyStatus,
+  1048→  1048→      controlMode:
+  1049→  1049→        this.mode === "AUTONOMOUS"
+  1050→  1050→          ? "AUTONOMOUS"
+  1051→  1051→          : this.controlLocked
+  1052→  1052→            ? "LOCKED"
+  1053→  1053→            : "MANUAL",
+  1054→  1054→      decision: this.decision,
+  1055→  1055→      engineOn: this.engineOn,
+  1056→  1056→      moving: this.kin.speed > 0.5,
+  1057→  1057→      speedKmh: this.kin.speed * 3.6,
+  1058→  1058→      accelMs2: this.kin.accel,
+  1059→  1059→      steer: this.kin.steering,
+  1060→  1060→      throttle: this.kin.throttle,
+  1061→  1061→      brake: this.kin.brake,
+  1062→  1062→      odometerM: this.kin.odometer,
+  1063→  1063→      lateral: this.kin.lateral,
+  1064→  1064→      headingDeg: this.kin.headingDeg,
+  1065→  1065→      hazardsOn: this.hazardsOn,
+  1066→  1066→      controlLocked: this.controlLocked || this.mode === "AUTONOMOUS" || this.mode === "STOPPING" || this.mode === "STOPPED" || this.mode === "EMERGENCY",
+  1067→  1067→      startBlockedReason: this.startBlockedReason,
+  1068→  1068→      powerLimited: this.bikeMotorLimited,
+  1069→  1069→      autonomyPhase: this.autonomy.phase,
+  1070→  1070→      stopZoneActive: this.autonomy.stopZone.active,
+  1071→  1071→      stopZonePos: this.autonomy.stopZone.position,
+  1072→  1072→      helmet: this.helmet,
+  1073→  1073→      alcohol: this.alcohol,
+  1074→  1074→      drowsiness: this.drowsiness,
+  1075→  1075→      driver: this.driver,
+  1076→  1076→      accident: this.accident,
+  1077→  1077→      vision: {
+  1078→  1078→        active: this.vision.active,
+  1079→  1079→        modelStatus: this.vision.modelStatus,
+  1080→  1080→        faceDetected: this.vision.faceDetected,
+  1081→  1081→        eyeClosed: this.vision.eyeClosed,
+  1082→  1082→        blinkScore: this.vision.blinkScore,
+  1083→  1083→        headYaw: this.vision.headYaw,
+  1084→  1084→        fps: this.vision.fps,
+  1085→  1085→      },
+  1086→  1086→      sessionStartedAt: this.sessionStartedAt,
+  1087→  1087→      lastAccel: this.kin.accel,
+  1088→  1088→      accidentWobble:
+  1089→  1089→        this.accident.active && this.accident.at !== null
+  1090→  1090→          ? Math.max(0, 1 - (this.clock - this.accident.at) / 2)
+  1091→  1091→          : 0,
+  1092→  1092→      bikeMotorLimited: this.bikeMotorLimited,
+  1093→  1093→    };
+  1094→  1094→  }
+  1095→  1095→
+  1096→  1096→  /* --------------------------- keyboard input ---------------------------- */
+  1097→  1097→
+  1098→  1098→  setInput(throttleDelta: number, brakeDelta: number, steer: number) {
+  1099→  1099→    if (this.controlLocked) return;
+  1100→  1100→    if (this.mode !== "MANUAL" && this.mode !== "READY" && this.mode !== "WARNING") return;
+  1101→  1101→    this.kin.throttle = Math.max(0, Math.min(1, this.kin.throttle + throttleDelta));
+  1102→  1102→    this.kin.brake = Math.max(0, Math.min(1, this.kin.brake + brakeDelta));
+  1103→  1103→    this.kin.steering = steer;
+  1104→  1104→  }
+  1105→  1105→
+  1106→  1106→  setSteer(steer: number) {
+  1107→  1107→    if (this.controlLocked) return;
+  1108→  1108→    if (this.mode !== "MANUAL" && this.mode !== "READY" && this.mode !== "WARNING") return;
+  1109→  1109→    this.kin.steering = steer;
+  1110→  1110→  }
+  1111→  1111→
+  1112→  1112→  setThrottle(v: number) {
+  1113→  1113→    if (this.controlLocked) return;
+  1114→  1114→    if (this.mode !== "MANUAL" && this.mode !== "READY" && this.mode !== "WARNING") return;
+  1115→  1115→    this.kin.throttle = v;
+  1116→  1116→  }
+  1117→  1117→
+  1118→  1118→  setBrake(v: number) {
+  1119→  1119→    if (this.controlLocked) return;
+  1120→  1120→    this.kin.brake = v;
+  1121→  1121→  }
+  1122→  1122→}
+  1123→  1123→
+  1124→  1124→/* --------------------------------------------------------------------------
+  1125→  1125→ * Singleton engine instance. loadSettings() safely returns defaults during
+  1126→  1126→ * SSR; the client re-hydrates persisted settings when the store boots.
+  1127→  1127→ * ------------------------------------------------------------------------ */
+  1128→  1128→
+  1129→  1129→import { loadSettings } from "../storage";
+  1130→  1130→
+  1131→  1131→export const simulationEngine = new SimulationEngine(loadSettings());
+  1132→  1132→

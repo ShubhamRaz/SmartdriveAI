@@ -24,3 +24,21 @@ Stage Summary:
 - Deliverable: runnable Next.js app at / (single-route SPA: Home / Simulation / Analytics / Settings views)
 - E2E verified: truck alcohol autonomous stop (SAFE STOP report, 10.8s intervention, truck parked in safe stop zone at 4.2m roadside offset with hazard lights), bike helmet interlock (blocked without helmet, starts with helmet), bike alcohol controlled stop, car drowsiness controlled stop (6.1s), analytics populated, settings persisted across reload, camera-denied fallback works
 - Key files: src/lib/simulation/engine.ts (core), src/components/sim/RoadCanvas.tsx (visual), src/lib/store.ts (React bridge), README.md (full docs)
+
+---
+Task ID: 2
+Agent: main (Super Z)
+Task: Fix "vehicle not moving after start (stuck at 0 km/h)" — root cause: driving required a physical keyboard hold (W/↑) with zero on-screen affordance, and the keyboard hook polled at 20 Hz force-writing throttle=0, which would also stomp any touch input.
+
+Work Log:
+- Diagnosed input chain: engine.ts gates throttle on mode READY/MANUAL/WARNING; useKeyboard polled via setInterval(apply, 50) writing setThrottle(0) whenever no key was pressed
+- engine.ts: added second input channel `pad = {throttle, brake, steer}` + setPadInput() (ungated so releases always zero out); tickDriving merges keyboard+pad (max for throttle/brake, sum for steer) except during demo auto-throttle; pad zeroed in start() and reset(); snapshot() now reports merged throttle/brake/steer so telemetry reflects pedals
+- useKeyboard.ts: rewritten event-driven (keydown/keyup/blur → rAF-scheduled apply) — no more idle polling; window blur clears stuck keys
+- New DriveControls.tsx: on-screen ◀ ▶ / BRAKE / GAS pedals under RoadCanvas; multi-touch via per-pointer map + setPointerCapture; pointerup/pointercancel/blur safety release; disabled+explained when engine off or control locked; pulsing "HOLD GAS (or W / ↑) to accelerate — vehicle is at 0 km/h" hint at standstill
+- SimulationView.tsx: wired <DriveControls /> between RoadCanvas and ControlPanel; ControlPanel hint updated
+- ESLint clean (fixed react-hooks/refs by separating render state from logic ref; rewrote a `/* global ... */` comment ESLint parsed as a globals directive); tsc --noEmit clean
+
+Stage Summary:
+- Browser-verified E2E: START → pedals enable → mouse-hold GAS: 0→43 km/h in 3 s → release: 120→117 km/h decay (matches 0.5 m/s² drag) → BRAKE hold: 81→19 km/h → W key still drives → RESET clean
+- Screenshots: verify-pedal-braking.png (brake active), verify-standstill-hint.png (guidance hint)
+- Keyboard remains fully supported; touch/mouse now first-class; demo scenarios unaffected (pad ignored while demoAutoThrottle)
