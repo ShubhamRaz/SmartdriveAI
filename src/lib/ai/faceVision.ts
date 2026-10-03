@@ -63,6 +63,7 @@ export function releaseFaceLandmarker() {
   }
   landmarker = null;
   loadPromise = null;
+  firstDetection = true;
 }
 
 /* ------------------------------ detection -------------------------------- */
@@ -72,13 +73,35 @@ interface BlendshapeLike {
   score: number;
 }
 
+/** Tracks whether the first detection call has been made (WASM logs only fire once) */
+let firstDetection = true;
+
 export function readFace(
   landmarker: FaceLandmarker,
   video: HTMLVideoElement,
   tsMs: number,
-  eyeThreshold = 0.55,
+  eyeThreshold = 0.35,
 ): FaceReading {
-  const res = landmarker.detectForVideo(video, tsMs);
+  // Suppress MediaPipe WASM internal log noise (xnnpack, OpenGL, TFLite delegate)
+  // These messages only fire on the first detectForVideo call per model load.
+  let res;
+  if (firstDetection) {
+    firstDetection = false;
+    const origWarn = console.warn;
+    const origLog = console.log;
+    // eslint-disable-next-line no-console
+    console.warn = () => {};
+    // eslint-disable-next-line no-console
+    console.log = () => {};
+    try {
+      res = landmarker.detectForVideo(video, tsMs);
+    } finally {
+      console.warn = origWarn;
+      console.log = origLog;
+    }
+  } else {
+    res = landmarker.detectForVideo(video, tsMs);
+  }
   const lm = res.faceLandmarks?.[0];
 
   if (!lm || lm.length === 0) {
