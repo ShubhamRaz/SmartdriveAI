@@ -145,21 +145,27 @@ MANUAL → RISK DETECTED → WARNING (escalation delay)
 
 Keyboard control is locked for the entire maneuver; a `MANUAL CONTROL LOCKED` indicator plus an on-canvas `AUTONOMOUS SAFETY MODE` overlay make the takeover unmistakable from across a demo hall.
 
-## Installation
+## Installation & First-Time Setup
+
+1. **Download the Code**: Download the project as a ZIP file and extract it to a folder on your computer.
+2. **Open Terminal**: Open a terminal or command prompt and navigate into the extracted project folder.
+   *(Tip: On Windows, open the folder, click the address bar, type `cmd`, and press Enter.)*
+3. **Install Node.js**: Ensure you have [Node.js](https://nodejs.org/) installed on your system.
+4. **Install Dependencies**: Run the following command in your terminal to install all required packages:
 
 ```bash
-npm install        # or: bun install
+npm install
 ```
 
 ## Running the Project
 
+After installation is complete, start the development server by running:
+
 ```bash
-npm run dev        # or: bun run dev
+npm run dev
 ```
 
-Open the printed localhost URL in Chrome/Edge. The application compiles and runs fully offline — the MediaPipe wasm runtime and face model are served from `public/`.
-
-> In hosted/sandboxed previews, open the app in a **new browser tab** for camera permission prompts to appear.
+Open the printed localhost URL (usually `http://localhost:3000`) in Chrome or Edge. The application compiles and runs fully offline — the MediaPipe wasm runtime and face model are served from `public/`.
 
 ## Camera Permissions
 
