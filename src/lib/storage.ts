@@ -9,7 +9,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cameraDeviceId: "",
   driverPresenceDetection: true,
   drowsinessEnabled: true,
-  eyeClosureThreshold: 0.55,
+  eyeClosureThreshold: 0.35,
   warningDuration: 2.0,
   criticalDuration: 3.5,
   faceAbsenceTimeout: 3.0,
@@ -44,6 +44,10 @@ function writeJSON(key: string, value: unknown) {
 
 export function loadSettings(): AppSettings {
   const stored = readJSON<Partial<AppSettings>>(SETTINGS_KEY, {});
+  // Auto-migrate the old default threshold so the user doesn't have to manually reset it
+  if (stored.eyeClosureThreshold === 0.55) {
+    stored.eyeClosureThreshold = 0.35;
+  }
   return {
     ...DEFAULT_SETTINGS,
     ...stored,

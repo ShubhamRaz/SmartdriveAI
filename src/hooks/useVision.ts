@@ -29,6 +29,19 @@ export function useVision(videoRef: React.RefObject<HTMLVideoElement | null>) {
   const fpsRef = useRef(0);
   const lastFrameRef = useRef(0);
   const mountedRef = useRef(true);
+  // Persistence: keep last known eye state when face is briefly lost (closed eyes = no landmarks)
+  const lastEyeClosedRef = useRef(false);
+  const lastFaceDetectedRef = useRef(false);
+  const faceLostAtRef = useRef<number | null>(null);
+  /** Exponentially-smoothed blink score to prevent single-frame fluctuations from flipping eyeClosed */
+  const smoothedBlinkRef = useRef(0);
+  /**
+   * How long (ms) to hold face-absent state before declaring driver truly gone
+   * ONLY applies when eyes were OPEN at face-lost moment (face turned away).
+   * When eyes were CLOSED at face-lost moment we hold eyeClosed=true indefinitely
+   * so the drowsiness accumulator can reach WARNING (2s) → CRITICAL (3.5s).
+   */
+  const FACE_AWAY_TIMEOUT_MS = 3000;
 
   const stopLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -44,6 +57,11 @@ export function useVision(videoRef: React.RefObject<HTMLVideoElement | null>) {
     if (videoRef.current) videoRef.current.srcObject = null;
     simulationEngine.vision.active = false;
     simulationEngine.vision.modelStatus = "OFF";
+    // Reset persistence state
+    lastEyeClosedRef.current = false;
+    lastFaceDetectedRef.current = false;
+    faceLostAtRef.current = null;
+    smoothedBlinkRef.current = 0;
     if (mountedRef.current) {
       setCameraStatus("OFF");
       setModelStatus("OFF");
@@ -76,10 +94,58 @@ export function useVision(videoRef: React.RefObject<HTMLVideoElement | null>) {
         const v = simulationEngine.vision;
         v.active = true;
         v.modelStatus = "ACTIVE";
-        v.faceDetected = reading.faceDetected;
-        v.eyeClosed = reading.eyeClosed;
-        v.blinkScore = reading.blinkScore;
-        v.headYaw = reading.headYaw;
+
+        if (reading.faceDetected) {
+          // Fast EMA (α=0.5): reacts to eye closure in 2 frames instead of 5.
+          // Decay is still gradual so brief score dips don't flip eyeClosed→open.
+          smoothedBlinkRef.current = smoothedBlinkRef.current * 0.5 + reading.blinkScore * 0.5;
+          const smoothedEyeClosed = smoothedBlinkRef.current >= threshold;
+
+          // Face detected — update everything normally
+          lastFaceDetectedRef.current = true;
+          faceLostAtRef.current = null;
+          // IMPORTANT: Use raw blinkScore at a LOWER threshold (0.20) for the persistence
+          // decision. The smoothed EMA takes too long to react before the face is lost.
+          // As soon as eyes are ~20% closed, we arm the "hold-eyeClosed" mechanism.
+          lastEyeClosedRef.current = reading.blinkScore >= 0.20;
+
+          v.faceDetected = true;
+          v.eyeClosed = smoothedEyeClosed;
+          v.blinkScore = smoothedBlinkRef.current;
+          v.headYaw = reading.headYaw;
+        } else {
+          // Face not detected — two causes:
+          //   A) Eyes closing/closed (driver drowsy): MediaPipe loses landmarks.
+          //      lastEyeClosedRef=true (raw score was ≥0.20 on last frame) →
+          //      Keep eyeClosed=true indefinitely so accumulator reaches CRITICAL.
+          //   B) Face turned away (driver distracted): eyes were open (raw score <0.20).
+          //      → Apply a timeout then trigger face-absent warning.
+          if (lastFaceDetectedRef.current && faceLostAtRef.current === null) {
+            faceLostAtRef.current = now;
+          }
+          const lostMs = faceLostAtRef.current !== null ? now - faceLostAtRef.current : Infinity;
+
+          if (lastEyeClosedRef.current) {
+            // Case A: eyes were closing/closed — hold eyeClosed=true until face returns.
+            v.faceDetected = true;
+            v.eyeClosed = true;
+            v.blinkScore = threshold;
+            v.headYaw = 0;
+          } else if (lostMs < FACE_AWAY_TIMEOUT_MS) {
+            // Case B within grace period: hold last state (eyes open, face briefly offscreen)
+            v.faceDetected = true;
+            v.eyeClosed = false;
+            v.blinkScore = 0;
+            v.headYaw = 0;
+          } else {
+            // Case B expired: truly absent (face turned away for >3s)
+            lastFaceDetectedRef.current = false;
+            v.faceDetected = false;
+            v.eyeClosed = false;
+            v.blinkScore = 0;
+            v.headYaw = 0;
+          }
+        }
         v.fps = fps;
       } catch {
         /* a failed frame must never crash the loop */

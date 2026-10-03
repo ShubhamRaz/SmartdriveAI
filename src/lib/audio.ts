@@ -10,7 +10,9 @@ export type AudioCue =
   | "SAFE_STOP"
   | "ACCIDENT"
   | "BLOCKED"
-  | "START";
+  | "START"
+  | "DROWSY_ALARM"
+  | "DROWSY_CRITICAL";
 
 let ctx: AudioContext | null = null;
 let muted = false;
@@ -126,6 +128,19 @@ export function playCue(cue: AudioCue) {
     case "BLOCKED":
       tone({ freq: 220, durationMs: 200, type: "square", gain: 0.1 });
       tone({ freq: 180, durationMs: 260, delayMs: 230, type: "square", gain: 0.1 });
+      break;
+    case "DROWSY_ALARM":
+      // Loud, urgent alternating two-tone alarm — designed to wake a drowsy driver
+      for (let i = 0; i < 4; i++) {
+        tone({ freq: 1050, durationMs: 120, delayMs: i * 260,       type: "square", gain: 0.22 });
+        tone({ freq: 700,  durationMs: 120, delayMs: i * 260 + 130, type: "square", gain: 0.22 });
+      }
+      break;
+    case "DROWSY_CRITICAL":
+      // Aggressive rising siren — driver unresponsive, autonomous takeover imminent
+      tone({ freq: 500,  sweepTo: 1400, durationMs: 380, type: "sawtooth", gain: 0.28 });
+      tone({ freq: 1400, sweepTo: 500,  durationMs: 380, delayMs: 390, type: "sawtooth", gain: 0.28 });
+      tone({ freq: 500,  sweepTo: 1400, durationMs: 380, delayMs: 780, type: "sawtooth", gain: 0.28 });
       break;
   }
 }

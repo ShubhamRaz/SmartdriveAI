@@ -17,7 +17,7 @@ export interface DrowsinessThresholds {
 export const DEFAULT_THRESHOLDS: DrowsinessThresholds = {
   warningDuration: 2.0,
   criticalDuration: 3.5,
-  eyeClosureThreshold: 0.55,
+  eyeClosureThreshold: 0.35,
 };
 
 export function isEyeClosed(blinkScore: number, t: DrowsinessThresholds): boolean {

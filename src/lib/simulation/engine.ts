@@ -188,6 +188,15 @@ export class SimulationEngine {
   private faceAbsentAnnounced = false;
   private manualStopRequested = false;
   private clock = 0;
+  /**
+   * Fatigue accumulator for drowsiness detection.
+   * Rises at 1 unit/s when eyes closed, decays at 0.4 units/s when eyes open.
+   * This prevents instant-reset from single-frame sensor noise or brief eye flickers.
+   * WARNING fires at warningDuration units; CRITICAL at criticalDuration units.
+   */
+  private fatigueAccum = 0;
+  /** Timestamp of the last DROWSY_ALARM beep — ensures we repeat every 2 s during WARNING */
+  private lastDrowsyAlarmAt = -10;
 
   sessionStartedAt: number | null = null;
   sessionCounts = { drowsiness: 0, alcohol: 0, accident: 0, interventions: 0, safeStops: 0 };
@@ -474,6 +483,8 @@ export class SimulationEngine {
     this.manualStopRequested = false;
     this.prevSeverity = "SAFE";
     this.prevAutonomyPhase = "NONE";
+    this.fatigueAccum = 0;
+    this.lastDrowsyAlarmAt = -10;
     this.firstCriticalAt = null;
     this.sessionStartedAt = null;
     this.sessionCounts = { drowsiness: 0, alcohol: 0, accident: 0, interventions: 0, safeStops: 0 };
@@ -627,7 +638,7 @@ export class SimulationEngine {
 
     if (this.manualStopRequested) {
       this.manualStopRequested = false;
-      this.beginControlledStop("MANUAL_STOP");
+      this.beginControlledStop("MANUAL_STOP", s.roadsideTarget);
     }
   }
 
@@ -668,7 +679,7 @@ export class SimulationEngine {
     if (this.manualStopRequested) {
       this.manualStopRequested = false;
       this.disengageAutopilot("operator stop request");
-      this.beginControlledStop("MANUAL_STOP");
+      this.beginControlledStop("MANUAL_STOP", this.settings.roadsideTarget);
     }
   }
 
@@ -825,60 +836,89 @@ export class SimulationEngine {
     const eyeClosed =
       this.simDrowsiness || (visionActive && s.drowsinessEnabled && this.vision.eyeClosed);
 
-    // temporal eye-closure accumulator
+    const warn = Math.max(0.6, s.warningDuration);
+    const crit = Math.max(warn + 0.4, s.criticalDuration);
+
     if (eyeClosed) {
-      this.drowsiness.closureDuration += dt;
+      // Accumulate fatigue: rise at 1 unit/s
+      this.fatigueAccum += dt;
+      this.drowsiness.closureDuration = this.fatigueAccum;
       this.drowsiness.eyeClosed = true;
       this.drowsiness.source = source;
-      const warn = Math.max(0.6, s.warningDuration);
-      const crit = Math.max(warn + 0.4, s.criticalDuration);
       this.drowsiness.level =
-        this.drowsiness.closureDuration >= crit
+        this.fatigueAccum >= crit
           ? "CRITICAL"
-          : this.drowsiness.closureDuration >= warn
+          : this.fatigueAccum >= warn
             ? "WARNING"
-            : this.drowsiness.closureDuration > 0.18
+            : this.fatigueAccum > 0.18
               ? "BLINK"
               : "NORMAL";
-      this.drowsiness.score = Math.min(
-        100,
-        (this.drowsiness.closureDuration / crit) * 100,
-      );
+      this.drowsiness.score = Math.min(100, (this.fatigueAccum / crit) * 100);
+
       if (this.drowsiness.level === "WARNING" && !this.drowsinessWarnAnnounced) {
         this.drowsinessWarnAnnounced = true;
         this.emit(
           "WARNING",
           source === "CAMERA" ? "AI VISION" : "SIMULATION",
-          `Drowsiness warning — eyes closed ${this.drowsiness.closureDuration.toFixed(1)} s`,
+          `Drowsiness warning — eyes closed ${this.fatigueAccum.toFixed(1)} s`,
         );
-        playCue("WARNING");
+        playCue("DROWSY_ALARM");
+        this.lastDrowsyAlarmAt = this.clock;
+      }
+      // Repeat the alarm every 2 s while still in WARNING or CRITICAL
+      if (
+        (this.drowsiness.level === "WARNING" || this.drowsiness.level === "CRITICAL") &&
+        this.clock - this.lastDrowsyAlarmAt >= 2.0
+      ) {
+        this.lastDrowsyAlarmAt = this.clock;
+        playCue(this.drowsiness.level === "CRITICAL" ? "DROWSY_CRITICAL" : "DROWSY_ALARM");
       }
       if (this.drowsiness.level === "CRITICAL" && !this.criticalAnnounced) {
         this.criticalAnnounced = true;
         this.emit(
           "CRITICAL",
           source === "CAMERA" ? "AI VISION" : "SIMULATION",
-          `Critical drowsiness — eyes closed ${this.drowsiness.closureDuration.toFixed(1)} s, driver unresponsive`,
+          `Critical drowsiness — eyes closed ${this.fatigueAccum.toFixed(1)} s, driver unresponsive`,
         );
-        playCue("CRITICAL");
+        playCue("DROWSY_CRITICAL");
+        this.lastDrowsyAlarmAt = this.clock;
       }
     } else {
-      if (this.drowsiness.closureDuration > 0.18) {
-        this.drowsiness.blinkCount += 1;
+      // Decay fatigue slowly (0.4 units/s) — brief eye opens no longer zero the counter.
+      // This means eyes must be open for ~5–8 s to fully clear a critical accumulation.
+      const prevAccum = this.fatigueAccum;
+      this.fatigueAccum = Math.max(0, this.fatigueAccum - dt * 0.4);
+
+      if (this.fatigueAccum > 0) {
+        // Still accumulating fatigue — preserve current level, just update score
+        this.drowsiness.closureDuration = this.fatigueAccum;
+        this.drowsiness.eyeClosed = false;
+        this.drowsiness.level =
+          this.fatigueAccum >= crit
+            ? "CRITICAL"
+            : this.fatigueAccum >= warn
+              ? "WARNING"
+              : this.fatigueAccum > 0.18
+                ? "BLINK"
+                : "NORMAL";
+        this.drowsiness.score = Math.min(100, (this.fatigueAccum / crit) * 100);
+      } else {
+        // Fully recovered — only NOW emit recovery and reset everything
+        if (prevAccum > 0.18) {
+          this.drowsiness.blinkCount += 1;
+        }
+        const wasWarning = prevAccum >= warn;
+        if (wasWarning) {
+          this.emit("INFO", "SYSTEM", "Driver alertness restored — drowsiness cleared");
+        }
+        this.drowsiness.closureDuration = 0;
+        this.drowsiness.eyeClosed = false;
+        this.drowsiness.level = "NORMAL";
+        this.drowsiness.score = 0;
+        this.drowsinessWarnAnnounced = false;
+        this.criticalAnnounced = false;
       }
-      const wasWarning =
-        this.drowsiness.level === "WARNING" || this.drowsiness.level === "CRITICAL";
-      if (wasWarning) {
-        this.emit("INFO", "SYSTEM", "Driver alertness restored — drowsiness cleared");
-      }
-      this.drowsiness.closureDuration = 0;
-      this.drowsiness.eyeClosed = false;
-      this.drowsiness.level = "NORMAL";
-      this.drowsiness.score = Math.max(0, this.drowsiness.score - dt * 60);
-      this.drowsinessWarnAnnounced = false;
-      this.criticalAnnounced = false;
       if (this.simDrowsiness) {
-        // sim toggle on but treated as open (shouldn't happen) — keep closed flag
         this.drowsiness.eyeClosed = true;
       }
     }
@@ -1008,7 +1048,7 @@ export class SimulationEngine {
             "Motor power reduced — controlled shutdown",
           );
           if (this.kin.speed > 0.2) {
-            this.beginControlledStop("SAFE_STOP", null, 0.35);
+            this.beginControlledStop("SAFE_STOP", s.roadsideTarget, 0.35);
           } else {
             this.finalizeStop("SAFE_STOP");
           }
@@ -1018,7 +1058,7 @@ export class SimulationEngine {
           this.safetyStatus = "CRITICAL";
           this.sessionCounts.interventions += 1;
           this.sessionIntervention = "Controlled safety stop";
-          this.beginControlledStop("SAFE_STOP");
+          this.beginControlledStop("SAFE_STOP", s.roadsideTarget);
           break;
         case "AUTONOMOUS_STOP":
           this.safetyStatus = "CRITICAL";
@@ -1028,7 +1068,7 @@ export class SimulationEngine {
           // engine running but interlock demands hold (e.g., alcohol while idle)
           this.safetyStatus = "CRITICAL";
           if (this.engineOn) {
-            this.beginControlledStop("SAFE_STOP");
+            this.beginControlledStop("SAFE_STOP", s.roadsideTarget);
           }
           break;
         default:
